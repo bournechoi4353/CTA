@@ -28,6 +28,17 @@ ours is used. A running turn can be **cancelled** with `Esc` (`Options.abortCont
 typecheck against the SDK, but the *live* behavior (model choosing to ask, abort
 actually interrupting, effort applied) needs a real run to confirm.
 
+**Phase 6 — effects library & theming.** Scene library (`/scene [name]` or
+cycle): flowfield, **torus** ([src/effects/torus.ts](src/effects/torus.ts), a
+rotating ASCII donut), **matrix** ([src/effects/matrix.ts](src/effects/matrix.ts),
+digital rain), plasma, starfield — the reactive scenes read the state driver, so
+any can be the "face". Swappable chrome **themes** (`/theme [nova|matrix|amber|mono]`)
+via [src/ui/theme.ts](src/ui/theme.ts) (a live-mutated `theme` object that all
+modules read), a `/borders` rounded↔ascii toggle, all persisted to
+[~/.cta/config.json](src/configStore.ts) (theme/scene/effort/borders) and restored
+on launch. `applyTheme()` reassigns `theme`'s fields in place, so switches
+propagate without re-importing.
+
 Underneath, the chat renders **markdown**
 ([src/ui/markdown.ts](src/ui/markdown.ts)) — fenced code blocks, headers,
 bullets, inline `code`/**bold** — as colored spans
@@ -117,7 +128,8 @@ src/
     plasma.ts         # full-frame stress scene                            ✓
     starfield.ts      # sparse-diff stress scene                           ✓
     flowField.ts      # reactive flow-field (state-driven)                ✓
-    ...               # more effects (Phase 6)
+    torus.ts          # reactive rotating ASCII donut                     ✓
+    matrix.ts         # reactive digital rain                             ✓
   state/
     assistantState.ts # state enum + machine                              ✓
     driver.ts         # state → interpolated visual params                ✓
@@ -138,9 +150,8 @@ src/
     text.ts           # sanitize text -> safe single-width ASCII               ✓
     modal.ts          # ASCII approval-modal box                               ✓
     box.ts            # rounded/ascii bordered boxes + chrome symbols          ✓
-    theme.ts          # named colors + border/placeholder (Phase 6 swappable)  ✓
-  config/
-    config.ts         # (Phase 6)
+    theme.ts          # swappable palettes (nova/matrix/amber/mono)          ✓
+  configStore.ts      # persisted prefs: ~/.cta/config.json                   ✓
 PLAN.md   CLAUDE.md   CREDITS.md
 ```
 

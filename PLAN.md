@@ -82,7 +82,7 @@ Real layout: visualizer + scrollable transcript + input, plus a status line
 Slash commands, keybindings, session resume.
 - **Done when:** it feels like a tool you'd leave open all day.
 
-### Phase 6 — Effects library & theming · **M**
+### Phase 6 — Effects library & theming · **M** · ✅ built
 Port the other scenes (torus raster, sparks, primitives) as alternate
 visualizers / an idle screensaver — crib from the **AsciiCreativeCoding**
 reference (see *Reference resources*). Palette + theme system. Config file.

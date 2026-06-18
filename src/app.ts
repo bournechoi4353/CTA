@@ -5,6 +5,8 @@ import { DEFAULT_COLOR } from './render/color'
 import type { Framebuffer } from './render/framebuffer'
 import type { Effect, FrameInfo } from './effects/types'
 import { FlowField } from './effects/flowField'
+import { Torus } from './effects/torus'
+import { Matrix } from './effects/matrix'
 import { Plasma } from './effects/plasma'
 import { Starfield } from './effects/starfield'
 import { ASSISTANT_STATES, STATE_LABEL, StateMachine, type AssistantState } from './state/assistantState'
@@ -20,7 +22,8 @@ import { buildTranscript } from './ui/transcript'
 import { toDisplay } from './ui/text'
 import { drawModal } from './ui/modal'
 import { drawBox, SYM } from './ui/box'
-import { theme } from './ui/theme'
+import { theme, applyTheme, THEME_NAMES, setBorders } from './ui/theme'
+import { loadConfig, saveConfig } from './configStore'
 import type { StyledLine } from './ui/spans'
 
 const VERSION = 'v0.1.0'
@@ -54,11 +57,16 @@ export function run(): void {
 
   term.enter()
 
+  const config = loadConfig()
+  let themeName = config.theme && THEME_NAMES.includes(config.theme) ? config.theme : 'nova'
+  applyTheme(themeName)
+  if (typeof config.asciiBorders === 'boolean') setBorders(config.asciiBorders)
+
   let cols = term.size().cols
   let rows = term.size().rows
   const renderer = new Renderer(term, cols, rows)
-  const effects: Effect[] = [new FlowField(), new Plasma(), new Starfield()]
-  let sceneIndex = 0
+  const effects: Effect[] = [new FlowField(), new Torus(), new Matrix(), new Plasma(), new Starfield()]
+  let sceneIndex = config.scene ? Math.max(0, effects.findIndex((e) => e.name === config.scene)) : 0
   let quit = false
 
   const machine = new StateMachine('idle')
@@ -68,6 +76,9 @@ export function run(): void {
   const gate = new PermissionGate()
   const ask = new AskController()
   const agent = new AgentSession(gate, ask)
+  if (config.effort && (EFFORTS as readonly string[]).includes(config.effort)) {
+    agent.setEffort(config.effort as Effort)
+  }
 
   const session: { model?: string; auth?: string } = {}
   const usage = { input: 0, output: 0, cost: 0 }
@@ -113,6 +124,15 @@ export function run(): void {
     },
   }
 
+  const persist = (): void => {
+    saveConfig({
+      theme: themeName,
+      scene: effects[sceneIndex]?.name,
+      effort: agent.currentEffort,
+      asciiBorders: theme.asciiBorders,
+    })
+  }
+
   const runCommand = (line: string): void => {
     const [cmd, ...rest] = line.slice(1).split(/\s+/)
     switch (cmd) {
@@ -123,10 +143,37 @@ export function run(): void {
       case 'clear':
         conversation.clear()
         break
-      case 'scene':
-        sceneIndex = (sceneIndex + 1) % effects.length
+      case 'scene': {
+        const arg = rest[0]
+        if (arg) {
+          const i = effects.findIndex((e) => e.name === arg)
+          if (i >= 0) sceneIndex = i
+          else conversation.add('system', `scenes: ${effects.map((e) => e.name).join(', ')}`)
+        } else {
+          sceneIndex = (sceneIndex + 1) % effects.length
+        }
         effects[sceneIndex]?.resize?.(cols, rows)
         renderer.markDirty()
+        persist()
+        break
+      }
+      case 'theme': {
+        const arg = rest[0]
+        if (arg && applyTheme(arg)) themeName = arg
+        else {
+          themeName = THEME_NAMES[(THEME_NAMES.indexOf(themeName) + 1) % THEME_NAMES.length]!
+          applyTheme(themeName)
+        }
+        renderer.markDirty()
+        conversation.add('system', `theme: ${themeName}  (${THEME_NAMES.join(', ')})`)
+        persist()
+        break
+      }
+      case 'borders':
+        setBorders(!theme.asciiBorders)
+        renderer.markDirty()
+        conversation.add('system', `borders: ${theme.asciiBorders ? 'ascii' : 'rounded'}`)
+        persist()
         break
       case 'state': {
         const match = ASSISTANT_STATES.find((s) => s === rest[0])
@@ -152,12 +199,13 @@ export function run(): void {
         if (arg && (EFFORTS as readonly string[]).includes(arg)) agent.setEffort(arg as Effort)
         else agent.setEffort(EFFORTS[(EFFORTS.indexOf(agent.currentEffort) + 1) % EFFORTS.length]!)
         conversation.add('system', `effort (thinking level): ${agent.currentEffort}`)
+        persist()
         break
       }
       case 'help':
         conversation.add(
           'system',
-          'commands: /help /clear /new /resume /scene /state <name> /effort [low|medium|high|xhigh|max] /quit   keys: PgUp/PgDn scroll, Up/Down history, shift+tab cycles permissions, Esc cancels a running turn',
+          'commands: /help /clear /new /resume /scene [name] /theme [name] /borders /state <name> /effort [level] /quit   keys: PgUp/PgDn scroll, Up/Down history, shift+tab permissions, Esc cancels',
         )
         break
       default:
