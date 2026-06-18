@@ -266,6 +266,11 @@ Verified facts (confirm specifics against the installed SDK when we get there):
   [src/agent/client.ts](src/agent/client.ts) yields the user message from an async
   generator and holds the input open until the turn's `result`. Do **not** revert
   to a string prompt. (Likewise `setModel`/`setPermissionMode` need streaming input.)
+- **⚠️ `canUseTool` allow MUST include `updatedInput`** — the TS type marks it
+  optional, but the SDK's runtime Zod schema **requires** it. Return
+  `{behavior:'allow', updatedInput: <the input, unchanged>}`; `{behavior:'allow'}`
+  alone throws `Tool permission request failed: ZodError … path:["updatedInput"]
+  expected record`. Deny is `{behavior:'deny', message}`. ([src/agent/permissions.ts](src/agent/permissions.ts))
 - **Event → state mapping (implemented in [src/agent/events.ts](src/agent/events.ts)):**
   the stream is `AsyncGenerator<SDKMessage>`; discriminate on `msg.type` —
   `system`/`subtype:'init'` → thinking (carries `model`, `cwd`, `apiKeySource`,

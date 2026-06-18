@@ -10,6 +10,7 @@ export interface PendingPermission {
 
 interface Entry {
   pending: PendingPermission
+  input: Record<string, unknown>
   resolve: (result: PermissionResult) => void
 }
 
@@ -53,17 +54,20 @@ export class PermissionGate {
   }
 
   request(toolName: string, input: Record<string, unknown>): Promise<PermissionResult> {
-    if (this.always.has(toolName)) return Promise.resolve({ behavior: 'allow' })
-    if (this.mode === 'bypass') return Promise.resolve({ behavior: 'allow' })
+    // NOTE: an `allow` result MUST carry `updatedInput` — the SDK validates it at
+    // runtime even though the TS type marks it optional. Pass the input through.
+    if (this.always.has(toolName)) return Promise.resolve({ behavior: 'allow', updatedInput: input })
+    if (this.mode === 'bypass') return Promise.resolve({ behavior: 'allow', updatedInput: input })
     if (this.mode === 'plan') {
       return Promise.resolve({ behavior: 'deny', message: 'Plan mode is read-only — switch off plan to make changes.' })
     }
     if (this.mode === 'acceptEdits' && EDIT_TOOLS.has(toolName.toLowerCase())) {
-      return Promise.resolve({ behavior: 'allow' })
+      return Promise.resolve({ behavior: 'allow', updatedInput: input })
     }
     return new Promise<PermissionResult>((resolve) => {
       this.queue.push({
         pending: { toolName, title: toolName, detail: describe(toolName, input) },
+        input,
         resolve,
       })
     })
@@ -76,7 +80,7 @@ export class PermissionGate {
     head.resolve(
       kind === 'deny'
         ? { behavior: 'deny', message: 'Denied by the user.' }
-        : { behavior: 'allow' },
+        : { behavior: 'allow', updatedInput: head.input },
     )
   }
 
