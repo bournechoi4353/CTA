@@ -4,27 +4,26 @@ Guidance for Claude Code (and any AI agent) working in this repo.
 
 ## Status
 
-**Phase 4 built — full toolset behind an approval gate.** Building on Phase 3's
-live agent wiring ([src/agent/](src/agent/)), the model can now use
-Write/Edit/Bash/etc. (Read/Glob/Grep stay auto-approved). Every other tool call
-is routed through the **[PermissionGate](src/agent/permissions.ts)** and shown as
-an ASCII approval **modal** ([src/ui/modal.ts](src/ui/modal.ts)): `y` allow,
-`a` always-allow (this session), `n`/Esc deny. `canUseTool` returns a promise the
-gate resolves on your keypress, so the visualizer keeps animating while it waits;
-parallel requests queue. Auth (env `ANTHROPIC_API_KEY` or logged-in `claude`
-subscription, shown in the status bar) is unchanged from Phase 3. `CTA_DEBUG=/path`
-logs raw agent messages.
+**Phase 5 built — compositor & UX.** The chat panel renders **markdown**
+([src/ui/markdown.ts](src/ui/markdown.ts)) — fenced code blocks, headers,
+bullets, inline `code`/**bold** — as colored spans
+([src/ui/spans.ts](src/ui/spans.ts)) over a cached, **scrollable** transcript
+(PgUp/PgDn, Home/End; auto-follows newest unless you scroll up). A status bar
+shows state · model · tokens · cost · cwd · scroll. The input line has **history**
+(Up/Down) and **slash commands** (`/help /clear /new /resume /scene /state
+/quit`). **Session resume** persists the last session per project
+([~/.cta/sessions.json](src/agent/sessionStore.ts)); `/resume` continues it.
+Colors are centralized in [src/ui/theme.ts](src/ui/theme.ts). (The compositor is
+inline in [src/app.ts](src/app.ts), not a separate module.) Phase 4's
+approval-gate modal is unchanged.
 
-> ⚠️ **Not yet confirmed live:** that the SDK calls `canUseTool` for writes/Bash
-> and that approval actually runs the tool — needs a real turn that triggers one.
-> Phase 3's live round-trip *is* confirmed. Gate logic (allow/always/deny/queue),
-> modal rendering, the event→state mapping, and the ASCII-render invariant are all
-> verified headlessly. If a write doesn't prompt as expected, check the
-> `CTA_DEBUG` log and [src/agent/client.ts](src/agent/client.ts) (permissionMode).
+> Verified headless: markdown render + span wrap + ASCII-safety, transcript,
+> session-store round-trip. Live-only (confirm on a real run): token/cost totals
+> populate from `result` messages, `/resume`'s SDK reconnect, and scroll feel.
 
-**Next: Phase 5 — the real compositor & UX** (scrollback, status line, code-block
-rendering, slash commands, session resume) — see [PLAN.md](PLAN.md). Sections
-below describing later phases are intent, not fact yet.
+**Next: Phase 6 — effects library & theming** (port more scenes, palettes,
+config) — see [PLAN.md](PLAN.md). Sections below describing later phases are
+intent, not fact yet.
 
 ## What CTA is
 
@@ -99,21 +98,23 @@ src/
     assistantState.ts # state enum + machine                              ✓
     driver.ts         # state → interpolated visual params                ✓
   agent/
-    client.ts         # AgentSession: query() turns, resume, read-only tools  ✓
-    events.ts         # SDKMessage → state transitions + text                  ✓
-    conversation.ts   # chat transcript model                                  ✓
+    client.ts         # AgentSession: query() turns, resume/reset, gating     ✓
+    events.ts         # SDKMessage → state + text + usage                      ✓
+    conversation.ts   # chat transcript model (+ revision counter)             ✓
     debug.ts          # CTA_DEBUG raw-message log                              ✓
     permissions.ts    # write/Bash approval gate (queue, always-allow)         ✓
+    sessionStore.ts   # persist last session id per project                    ✓
   ui/
-    input.ts          # raw-mode line editor                                   ✓
-    transcript.ts     # labelled, word-wrapped transcript lines                ✓
-    wrap.ts           # word-wrap helper                                       ✓
-    text.ts           # sanitize text → safe single-width ASCII                ✓
+    input.ts          # raw-mode line editor + history recall                  ✓
+    transcript.ts     # conversation -> styled lines (markdown)                ✓
+    markdown.ts       # markdown -> styled spans (code/headers/bullets)        ✓
+    spans.ts          # Span/StyledLine + span-aware wrap                      ✓
+    wrap.ts           # plain word-wrap helper                                 ✓
+    text.ts           # sanitize text -> safe single-width ASCII               ✓
     modal.ts          # ASCII approval-modal box                               ✓
-    layout.ts/statusline.ts  # dedicated compositor (Phase 5; inline in app for now)
+    theme.ts          # named colors (Phase 6 makes swappable)                 ✓
   config/
-    config.ts
-    themes.ts
+    config.ts         # (Phase 6)
 PLAN.md   CLAUDE.md   CREDITS.md
 ```
 

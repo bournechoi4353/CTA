@@ -2,53 +2,45 @@ import { performance } from 'node:perf_hooks'
 import { basename } from 'node:path'
 import { Terminal } from './terminal'
 import { Renderer, type FlushStats } from './render/renderer'
-import { rgb, DEFAULT_COLOR } from './render/color'
+import { DEFAULT_COLOR } from './render/color'
+import type { Framebuffer } from './render/framebuffer'
 import type { Effect, FrameInfo } from './effects/types'
 import { FlowField } from './effects/flowField'
 import { Plasma } from './effects/plasma'
 import { Starfield } from './effects/starfield'
-import {
-  ASSISTANT_STATES,
-  STATE_LABEL,
-  StateMachine,
-} from './state/assistantState'
+import { ASSISTANT_STATES, STATE_LABEL, StateMachine } from './state/assistantState'
 import { VisualDriver } from './state/driver'
 import { AgentSession } from './agent/client'
 import type { AgentHandlers } from './agent/events'
-import { Conversation, type Role } from './agent/conversation'
+import { Conversation } from './agent/conversation'
 import { PermissionGate } from './agent/permissions'
+import { loadSession, saveSession } from './agent/sessionStore'
 import { InputLine } from './ui/input'
-import { transcriptLines } from './ui/transcript'
+import { buildTranscript } from './ui/transcript'
 import { toDisplay } from './ui/text'
 import { drawModal } from './ui/modal'
+import { theme } from './ui/theme'
+import type { StyledLine } from './ui/spans'
 
 const TARGET_FPS = 30
 const FRAME_MS = 1000 / TARGET_FPS
-
 const SMOKE = process.env['CTA_SMOKE'] === '1'
 const SMOKE_FRAMES = 60
 
-const HUD_FG = rgb(235, 235, 245)
-const HUD_BG = rgb(0, 0, 0)
-const PANEL_BG = rgb(12, 12, 18)
-const TEXT_USER = rgb(125, 205, 255)
-const TEXT_ASSISTANT = rgb(228, 228, 238)
-const TEXT_SYSTEM = rgb(120, 120, 145)
-const ACCENT = rgb(125, 205, 255)
-
-function roleColor(role: Role): number {
-  return role === 'user' ? TEXT_USER : role === 'system' ? TEXT_SYSTEM : TEXT_ASSISTANT
+// Key sequences we intercept before the input line.
+const K = {
+  ctrlC: '\x03',
+  esc: '\x1b',
+  up: '\x1b[A',
+  down: '\x1b[B',
+  pageUp: '\x1b[5~',
+  pageDown: '\x1b[6~',
+  home: ['\x1b[H', '\x1b[1~'],
+  end: ['\x1b[F', '\x1b[4~'],
 }
 
-/**
- * Phase 3 — "it's alive". The flow-field visualizer is the assistant's face; a
- * transcript + input panel sits below it. Typing a question runs a Claude Agent
- * SDK turn whose streamed events drive the state machine, so the face reacts
- * live (thinking → tool-running → responding → idle) while the answer prints.
- */
 export function run(): void {
   const term = new Terminal()
-
   if (!term.isInteractive && !SMOKE) {
     process.stderr.write(
       'CTA needs an interactive terminal (a TTY). Run it directly in your shell.\n',
@@ -72,10 +64,26 @@ export function run(): void {
   const input = new InputLine()
   const gate = new PermissionGate()
   const agent = new AgentSession(gate)
+
   const session: { model?: string; auth?: string } = {}
+  const usage = { input: 0, output: 0, cost: 0 }
+  const history: string[] = []
+  let historyIdx = 0
   let assistantTextThisTurn = false
 
-  conversation.add('system', 'Ask about your code. Enter sends, Ctrl-C quits. /help for commands.')
+  // Transcript line cache + scroll state.
+  let cache: { rev: number; width: number; lines: StyledLine[] } = { rev: -1, width: -1, lines: [] }
+  let scroll = 0 // lines scrolled up from the bottom (0 = following newest)
+  let prevTotal = 0
+  const view = { total: 0, winH: 1 }
+
+  const resumable = loadSession(process.cwd())
+  conversation.add(
+    'system',
+    resumable
+      ? 'Ask about your code. Enter sends, Ctrl-C quits. /help for commands. A previous session was found - /resume to continue it.'
+      : 'Ask about your code. Enter sends, Ctrl-C quits. /help for commands.',
+  )
 
   const handlers: AgentHandlers = {
     onState: (state) => machine.set(state),
@@ -88,9 +96,16 @@ export function run(): void {
       session.model = info.model
       session.auth = info.apiKeySource
     },
+    onUsage: (u) => {
+      usage.input += u.input
+      usage.output += u.output
+      usage.cost += u.costUsd
+    },
     onResult: (text, isError) => {
       if (isError) conversation.add('system', `! ${toDisplay(text)}`)
       else if (!assistantTextThisTurn && text.length > 0) conversation.appendToLast('assistant', toDisplay(text))
+      const id = agent.currentSessionId
+      if (id) saveSession(process.cwd(), id)
     },
   }
 
@@ -110,14 +125,29 @@ export function run(): void {
         renderer.markDirty()
         break
       case 'state': {
-        const want = rest[0]
-        const match = ASSISTANT_STATES.find((s) => s === want)
+        const match = ASSISTANT_STATES.find((s) => s === rest[0])
         if (match) machine.set(match)
         else conversation.add('system', `states: ${ASSISTANT_STATES.join(', ')}`)
         break
       }
+      case 'resume':
+        if (resumable) {
+          agent.resume(resumable)
+          conversation.add('system', `resumed session ${resumable.slice(0, 8)} - context restored (scrollback is not)`)
+        } else {
+          conversation.add('system', 'no previous session to resume')
+        }
+        break
+      case 'new':
+        agent.reset()
+        conversation.clear()
+        conversation.add('system', 'new session')
+        break
       case 'help':
-        conversation.add('system', 'commands: /help  /clear  /scene  /state <name>  /quit')
+        conversation.add(
+          'system',
+          'commands: /help  /clear  /new  /resume  /scene  /state <name>  /quit   keys: PgUp/PgDn scroll, Up/Down history',
+        )
         break
       default:
         conversation.add('system', `unknown command: /${cmd ?? ''}`)
@@ -125,37 +155,86 @@ export function run(): void {
     }
   }
 
-  const offKey = term.onKey((key) => {
-    if (key === '\x03') {
-      quit = true
-      return
-    }
-    // While a tool permission is pending, keys drive the modal, not the input.
-    if (gate.current) {
-      if (key === 'y' || key === 'Y') gate.decide('allow')
-      else if (key === 'a' || key === 'A') gate.decide('always')
-      else if (key === 'n' || key === 'N' || key === '\x1b') gate.decide('deny')
-      return
-    }
-    if (input.handle(key) !== 'submit') return
-
-    const line = input.value.trim()
-    if (line.length === 0) {
+  const submit = (): void => {
+    const value = input.value.trim()
+    if (value.length === 0) {
       input.clear()
       return
     }
-    if (line.startsWith('/')) {
+    if (value.startsWith('/')) {
       input.clear()
-      runCommand(line)
+      runCommand(value)
       return
     }
     if (agent.isBusy) return // keep the text; ignore until the current turn finishes
 
     input.clear()
-    conversation.add('user', line)
+    history.push(value)
+    historyIdx = history.length
+    conversation.add('user', value)
     assistantTextThisTurn = false
+    scroll = 0
     machine.set('thinking')
-    void agent.send(line, handlers)
+    void agent.send(value, handlers)
+  }
+
+  const clampScroll = (): void => {
+    const max = Math.max(0, view.total - view.winH)
+    if (scroll > max) scroll = max
+    if (scroll < 0) scroll = 0
+  }
+
+  const offKey = term.onKey((key) => {
+    if (key === K.ctrlC) {
+      quit = true
+      return
+    }
+    if (gate.current) {
+      if (key === 'y' || key === 'Y') gate.decide('allow')
+      else if (key === 'a' || key === 'A') gate.decide('always')
+      else if (key === 'n' || key === 'N' || key === K.esc) gate.decide('deny')
+      return
+    }
+
+    const page = Math.max(1, view.winH - 1)
+    if (key === K.pageUp) {
+      scroll += page
+      clampScroll()
+      return
+    }
+    if (key === K.pageDown) {
+      scroll -= page
+      clampScroll()
+      return
+    }
+    if (K.home.includes(key)) {
+      scroll = Math.max(0, view.total - view.winH)
+      return
+    }
+    if (K.end.includes(key)) {
+      scroll = 0
+      return
+    }
+    if (key === K.up) {
+      if (history.length > 0 && historyIdx > 0) {
+        historyIdx -= 1
+        input.set(history[historyIdx] ?? '')
+      }
+      return
+    }
+    if (key === K.down) {
+      if (historyIdx < history.length) {
+        historyIdx += 1
+        input.set(historyIdx === history.length ? '' : (history[historyIdx] ?? ''))
+      }
+      return
+    }
+    if (key === K.esc) {
+      input.clear()
+      return
+    }
+
+    if (input.handle(key) === 'submit') submit()
   })
 
   const stop = (): void => {
@@ -179,7 +258,6 @@ export function run(): void {
     }
 
     const frameStart = performance.now()
-
     const size = term.size()
     if (size.cols !== cols || size.rows !== rows) {
       cols = size.cols
@@ -214,36 +292,48 @@ export function run(): void {
     }
 
     const fb = renderer.begin()
-    effect.render(fb, info) // the "face" fills the screen behind the UI
+    effect.render(fb, info)
 
-    // --- UI overlay -------------------------------------------------------
+    // --- layout ---
     const inputRow = rows - 1
-    const panelH = Math.max(3, Math.min(12, rows - 4))
+    const panelH = Math.max(3, Math.min(14, rows - 4))
     const panelTop = inputRow - panelH
 
-    // Top status bar.
-    const status = ` CTA | ${STATE_LABEL[machine.state]}${agent.isBusy ? ' ...' : ''} | ${session.model ?? 'claude'} | auth:${session.auth ?? '-'} | ${basename(process.cwd())} `
-    fb.drawText(0, 0, toDisplay(status).slice(0, cols), HUD_FG, HUD_BG)
+    // status bar
+    const tokens = usage.input + usage.output
+    const scrollTag = scroll > 0 ? ` | scroll +${scroll}` : ''
+    const status = ` CTA | ${STATE_LABEL[machine.state]}${agent.isBusy ? ' ...' : ''} | ${session.model ?? 'claude'} | ${formatTokens(tokens)} tok | $${usage.cost.toFixed(4)} | ${basename(process.cwd())}${scrollTag} `
+    fb.fillRect(0, 0, cols, 1, 0x20, DEFAULT_COLOR, theme.hudBg)
+    fb.drawText(0, 0, toDisplay(status).slice(0, cols), theme.hudFg, theme.hudBg)
 
-    // Chat panel background (transcript + input row).
-    fb.fillRect(0, panelTop, cols, panelH + 1, 0x20, DEFAULT_COLOR, PANEL_BG)
+    // chat panel
+    fb.fillRect(0, panelTop, cols, panelH + 1, 0x20, DEFAULT_COLOR, theme.panelBg)
 
-    // Transcript.
-    const lines = transcriptLines(conversation.all, cols - 2, panelH)
-    let ty = panelTop
-    for (const l of lines) {
-      fb.drawText(1, ty, l.text.slice(0, cols - 2), roleColor(l.role), PANEL_BG)
-      ty += 1
+    // transcript (cached; rebuilt on change or resize)
+    const innerW = cols - 2
+    if (cache.rev !== conversation.revision || cache.width !== innerW) {
+      cache = { rev: conversation.revision, width: innerW, lines: buildTranscript(conversation.all, innerW) }
     }
+    const total = cache.lines.length
+    const winH = panelH
+    if (scroll > 0 && total > prevTotal) scroll += total - prevTotal // hold position as new lines arrive
+    prevTotal = total
+    view.total = total
+    view.winH = winH
+    clampScroll()
 
-    // Input line with a block cursor.
+    const startIdx = Math.max(0, total - winH - scroll)
+    const visibleLines = cache.lines.slice(startIdx, startIdx + winH)
+    visibleLines.forEach((line, i) => drawStyledLine(fb, 1, panelTop + i, line, innerW))
+
+    // input line + cursor
     const shown = `> ${input.value}`
     const maxShown = Math.max(0, cols - 3)
     const visible = shown.length > maxShown ? shown.slice(shown.length - maxShown) : shown
-    fb.drawText(1, inputRow, visible, TEXT_ASSISTANT, PANEL_BG)
-    fb.set(1 + visible.length, inputRow, 0x20, DEFAULT_COLOR, ACCENT)
+    fb.drawText(1, inputRow, visible, theme.assistant, theme.panelBg)
+    fb.set(1 + visible.length, inputRow, 0x20, DEFAULT_COLOR, theme.accent)
 
-    // Permission modal (over everything) when a tool is awaiting approval.
+    // permission modal (on top)
     const pending = gate.current
     if (pending) {
       const more = gate.queued > 1 ? `   (+${gate.queued - 1} more)` : ''
@@ -265,15 +355,31 @@ export function run(): void {
       schedule()
     } else {
       let resumed = false
-      const resume = (): void => {
+      const resumeLoop = (): void => {
         if (resumed) return
         resumed = true
         schedule()
       }
-      term.onceDrain(resume)
-      setTimeout(resume, 100)
+      term.onceDrain(resumeLoop)
+      setTimeout(resumeLoop, 100)
     }
   }
 
   tick()
+}
+
+function drawStyledLine(fb: Framebuffer, x: number, y: number, line: StyledLine, maxW: number): void {
+  let used = 0
+  for (const span of line.spans) {
+    if (used >= maxW) break
+    const text = span.text.length > maxW - used ? span.text.slice(0, maxW - used) : span.text
+    if (text.length > 0) fb.drawText(x + used, y, text, span.fg, span.bg)
+    used += text.length
+  }
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
 }

@@ -15,6 +15,11 @@ export class InputLine {
     this.buf = ''
   }
 
+  /** Replace the buffer (used for history recall). */
+  set(value: string): void {
+    this.buf = value
+  }
+
   handle(key: string): InputAction {
     if (key === '\r' || key === '\n') return 'submit'
     if (key === '\x7f' || key === '\x08') {

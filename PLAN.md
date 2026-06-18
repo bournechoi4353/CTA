@@ -75,7 +75,7 @@ approval modal in the TUI; give tool execution its own distinct visual state.
 - **Done when:** "what does this function do?" / "refactor X" works in a real
   repo, with approval prompts for writes and shell commands.
 
-### Phase 5 — Compositor & UX · **L**
+### Phase 5 — Compositor & UX · **L** · ✅ built (confirm live)
 Real layout: visualizer + scrollable transcript + input, plus a status line
 (model · cwd · token/cost · current state). Markdown + code-block rendering.
 Slash commands, keybindings, session resume.

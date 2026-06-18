@@ -13,6 +13,8 @@ export interface AgentHandlers {
   onSystemInit(info: { model: string; cwd: string; apiKeySource: string; tools: string[] }): void
   /** Turn finished (success or error) — `text` is the final/answer or error. */
   onResult(text: string, isError: boolean): void
+  /** Token + cost usage for a completed turn. */
+  onUsage?(usage: { input: number; output: number; costUsd: number }): void
 }
 
 // Content blocks are typed loosely on purpose: we only read a few fields and
@@ -78,6 +80,12 @@ export function mapMessage(msg: SDKMessage, h: AgentHandlers): void {
 
     case 'result':
       if (msg.subtype === 'success') {
+        const usage = msg.usage as { input_tokens?: number; output_tokens?: number } | undefined
+        h.onUsage?.({
+          input: usage?.input_tokens ?? 0,
+          output: usage?.output_tokens ?? 0,
+          costUsd: typeof msg.total_cost_usd === 'number' ? msg.total_cost_usd : 0,
+        })
         h.onResult(msg.result, msg.is_error === true)
         h.onState(msg.is_error === true ? 'error' : 'idle')
       } else {

@@ -24,6 +24,20 @@ export class AgentSession {
     return this.busy
   }
 
+  get currentSessionId(): string | null {
+    return this.sessionId
+  }
+
+  /** Continue a prior session (e.g. restored from disk). */
+  resume(sessionId: string): void {
+    this.sessionId = sessionId
+  }
+
+  /** Start a fresh session on the next turn. */
+  reset(): void {
+    this.sessionId = null
+  }
+
   async send(prompt: string, handlers: AgentHandlers): Promise<void> {
     if (this.busy) return
     this.busy = true

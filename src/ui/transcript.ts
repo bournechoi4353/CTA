@@ -1,30 +1,29 @@
-import type { Role, Turn } from '../agent/conversation'
-import { wrapText } from './wrap'
-
-export interface RenderedLine {
-  role: Role
-  text: string
-}
-
-const LABELS: Record<Role, string> = {
-  user: 'you  ',
-  assistant: '     ',
-  system: '   ',
-}
+import type { Turn } from '../agent/conversation'
+import { theme } from './theme'
+import { toDisplay } from './text'
+import { wrapSpans, type StyledLine } from './spans'
+import { renderMarkdown } from './markdown'
 
 /**
- * Flatten the conversation into wrapped, labelled lines and return the last
- * `maxLines` (most recent at the bottom).
+ * Flatten the conversation into styled lines: assistant turns are markdown-
+ * rendered; user/system turns are plain, colored, and labelled. Returns the full
+ * list (the app slices it for the scroll window).
  */
-export function transcriptLines(turns: readonly Turn[], width: number, maxLines: number): RenderedLine[] {
-  const out: RenderedLine[] = []
+export function buildTranscript(turns: readonly Turn[], width: number): StyledLine[] {
+  const out: StyledLine[] = []
   for (const turn of turns) {
-    const label = LABELS[turn.role]
-    const indent = ' '.repeat(label.length)
-    const body = wrapText(turn.text, Math.max(1, width - label.length))
-    body.forEach((line, i) => {
-      out.push({ role: turn.role, text: (i === 0 ? label : indent) + line })
-    })
+    if (turn.role === 'assistant') {
+      for (const line of renderMarkdown(turn.text, width, theme.panelBg)) out.push(line)
+    } else if (turn.role === 'user') {
+      const spans = [
+        { text: 'you  ', fg: theme.user, bg: theme.panelBg },
+        { text: toDisplay(turn.text), fg: theme.user, bg: theme.panelBg },
+      ]
+      for (const line of wrapSpans(spans, width)) out.push(line)
+    } else {
+      const spans = [{ text: toDisplay(turn.text), fg: theme.system, bg: theme.panelBg }]
+      for (const line of wrapSpans(spans, width)) out.push(line)
+    }
   }
-  return out.slice(Math.max(0, out.length - maxLines))
+  return out
 }
