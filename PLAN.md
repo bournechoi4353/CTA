@@ -1,9 +1,10 @@
 # CTA — Build Plan
 
-> **CTA** = a terminal-resident coding companion. Claude drives the conversation
-> and tools via the Claude Agent SDK; a from-scratch ANSI render loop draws a
-> reactive visualizer that mirrors what the assistant is doing.
-> *(Working name — could read as "Claude Terminal Assistant".)*
+> **CTA — "Claude Code, but mine."** A terminal coding assistant on the Claude
+> Agent SDK, with the user's own living terminal art (a state-reactive flow-field
+> visualizer) as the personality and UI centerpiece, dressed in a Claude-Code-style
+> bordered layout (rounded boxes, welcome header, input box, status line) — and
+> deliberately **no mascot**. *(Working name — "Claude Terminal Assistant".)*
 
 ## Decisions locked
 

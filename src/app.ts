@@ -1,5 +1,4 @@
 import { performance } from 'node:perf_hooks'
-import { basename } from 'node:path'
 import { Terminal } from './terminal'
 import { Renderer, type FlushStats } from './render/renderer'
 import { DEFAULT_COLOR } from './render/color'
@@ -8,31 +7,35 @@ import type { Effect, FrameInfo } from './effects/types'
 import { FlowField } from './effects/flowField'
 import { Plasma } from './effects/plasma'
 import { Starfield } from './effects/starfield'
-import { ASSISTANT_STATES, STATE_LABEL, StateMachine } from './state/assistantState'
+import { ASSISTANT_STATES, STATE_LABEL, StateMachine, type AssistantState } from './state/assistantState'
 import { VisualDriver } from './state/driver'
-import { AgentSession } from './agent/client'
+import { AgentSession, EFFORTS, type Effort } from './agent/client'
 import type { AgentHandlers } from './agent/events'
 import { Conversation } from './agent/conversation'
-import { PermissionGate } from './agent/permissions'
+import { PermissionGate, type PermissionMode } from './agent/permissions'
+import { AskController } from './agent/ask'
 import { loadSession, saveSession } from './agent/sessionStore'
 import { InputLine } from './ui/input'
 import { buildTranscript } from './ui/transcript'
 import { toDisplay } from './ui/text'
 import { drawModal } from './ui/modal'
+import { drawBox, SYM } from './ui/box'
 import { theme } from './ui/theme'
 import type { StyledLine } from './ui/spans'
 
+const VERSION = 'v0.1.0'
 const TARGET_FPS = 30
 const FRAME_MS = 1000 / TARGET_FPS
 const SMOKE = process.env['CTA_SMOKE'] === '1'
 const SMOKE_FRAMES = 60
+const PLACEHOLDER = 'Ask about your code, or /help'
 
-// Key sequences we intercept before the input line.
 const K = {
   ctrlC: '\x03',
   esc: '\x1b',
   up: '\x1b[A',
   down: '\x1b[B',
+  shiftTab: '\x1b[Z',
   pageUp: '\x1b[5~',
   pageDown: '\x1b[6~',
   home: ['\x1b[H', '\x1b[1~'],
@@ -63,7 +66,8 @@ export function run(): void {
   const conversation = new Conversation()
   const input = new InputLine()
   const gate = new PermissionGate()
-  const agent = new AgentSession(gate)
+  const ask = new AskController()
+  const agent = new AgentSession(gate, ask)
 
   const session: { model?: string; auth?: string } = {}
   const usage = { input: 0, output: 0, cost: 0 }
@@ -71,9 +75,8 @@ export function run(): void {
   let historyIdx = 0
   let assistantTextThisTurn = false
 
-  // Transcript line cache + scroll state.
   let cache: { rev: number; width: number; lines: StyledLine[] } = { rev: -1, width: -1, lines: [] }
-  let scroll = 0 // lines scrolled up from the bottom (0 = following newest)
+  let scroll = 0
   let prevTotal = 0
   const view = { total: 0, winH: 1 }
 
@@ -81,8 +84,8 @@ export function run(): void {
   conversation.add(
     'system',
     resumable
-      ? 'Ask about your code. Enter sends, Ctrl-C quits. /help for commands. A previous session was found - /resume to continue it.'
-      : 'Ask about your code. Enter sends, Ctrl-C quits. /help for commands.',
+      ? 'Welcome back. A previous session was found - type /resume to continue it, or just ask.'
+      : 'Ask about your code. Try "what does src/app.ts do?" or /help for commands.',
   )
 
   const handlers: AgentHandlers = {
@@ -91,7 +94,7 @@ export function run(): void {
       assistantTextThisTurn = true
       conversation.appendToLast('assistant', toDisplay(text))
     },
-    onToolUse: (name) => conversation.add('system', `> ${toDisplay(name)}`),
+    onToolUse: (name) => conversation.add('system', `${SYM.mode} ${toDisplay(prettyTool(name))}`),
     onSystemInit: (info) => {
       session.model = info.model
       session.auth = info.apiKeySource
@@ -101,6 +104,7 @@ export function run(): void {
       usage.output += u.output
       usage.cost += u.costUsd
     },
+    onNotice: (text) => conversation.add('system', toDisplay(text)),
     onResult: (text, isError) => {
       if (isError) conversation.add('system', `! ${toDisplay(text)}`)
       else if (!assistantTextThisTurn && text.length > 0) conversation.appendToLast('assistant', toDisplay(text))
@@ -143,10 +147,17 @@ export function run(): void {
         conversation.clear()
         conversation.add('system', 'new session')
         break
+      case 'effort': {
+        const arg = rest[0]
+        if (arg && (EFFORTS as readonly string[]).includes(arg)) agent.setEffort(arg as Effort)
+        else agent.setEffort(EFFORTS[(EFFORTS.indexOf(agent.currentEffort) + 1) % EFFORTS.length]!)
+        conversation.add('system', `effort (thinking level): ${agent.currentEffort}`)
+        break
+      }
       case 'help':
         conversation.add(
           'system',
-          'commands: /help  /clear  /new  /resume  /scene  /state <name>  /quit   keys: PgUp/PgDn scroll, Up/Down history',
+          'commands: /help /clear /new /resume /scene /state <name> /effort [low|medium|high|xhigh|max] /quit   keys: PgUp/PgDn scroll, Up/Down history, shift+tab cycles permissions, Esc cancels a running turn',
         )
         break
       default:
@@ -166,7 +177,7 @@ export function run(): void {
       runCommand(value)
       return
     }
-    if (agent.isBusy) return // keep the text; ignore until the current turn finishes
+    if (agent.isBusy) return
 
     input.clear()
     history.push(value)
@@ -180,13 +191,27 @@ export function run(): void {
 
   const clampScroll = (): void => {
     const max = Math.max(0, view.total - view.winH)
-    if (scroll > max) scroll = max
-    if (scroll < 0) scroll = 0
+    scroll = Math.max(0, Math.min(scroll, max))
   }
 
   const offKey = term.onKey((key) => {
     if (key === K.ctrlC) {
       quit = true
+      return
+    }
+    if (ask.current) {
+      if (key === K.esc) {
+        agent.cancel()
+        return
+      }
+      if (key.length === 1) {
+        const q = ask.current
+        const idx = key.charCodeAt(0) - 49 // '1' -> 0
+        if (idx >= 0 && idx < q.options.length) {
+          conversation.add('system', `? ${toDisplay(q.question)} ${SYM.mode} ${toDisplay(q.options[idx] ?? '')}`)
+          ask.answer(idx)
+        }
+      }
       return
     }
     if (gate.current) {
@@ -195,7 +220,10 @@ export function run(): void {
       else if (key === 'n' || key === 'N' || key === K.esc) gate.decide('deny')
       return
     }
-
+    if (key === K.shiftTab) {
+      gate.cycleMode()
+      return
+    }
     const page = Math.max(1, view.winH - 1)
     if (key === K.pageUp) {
       scroll += page
@@ -230,10 +258,13 @@ export function run(): void {
       return
     }
     if (key === K.esc) {
+      if (agent.isBusy) {
+        agent.cancel()
+        return
+      }
       input.clear()
       return
     }
-
     if (input.handle(key) === 'submit') submit()
   })
 
@@ -246,9 +277,6 @@ export function run(): void {
   let lastTick = start
   let frame = 0
   let simTime = 0
-  let fps = 0
-  let fpsAccumMs = 0
-  let fpsFrames = 0
   let stats: FlushStats = { changed: 0, bytes: 0, ok: true }
 
   const tick = (): void => {
@@ -272,14 +300,6 @@ export function run(): void {
     machine.update(realDt)
     const params = driver.update(realDt, machine.state)
 
-    fpsAccumMs += realDt * 1000
-    fpsFrames += 1
-    if (fpsAccumMs >= 250) {
-      fps = (fpsFrames * 1000) / fpsAccumMs
-      fpsAccumMs = 0
-      fpsFrames = 0
-    }
-
     const effect = effects[sceneIndex]!
     const info: FrameInfo = {
       dt: realDt,
@@ -292,50 +312,53 @@ export function run(): void {
     }
 
     const fb = renderer.begin()
-    effect.render(fb, info)
+    effect.render(fb, info) // the living art fills the screen behind the chrome
 
-    // --- layout ---
-    const inputRow = rows - 1
-    const panelH = Math.max(3, Math.min(14, rows - 4))
-    const panelTop = inputRow - panelH
+    composeUi(fb, {
+      cols,
+      rows,
+      state: machine.state,
+      busy: agent.isBusy,
+      model: session.model,
+      auth: session.auth,
+      mode: gate.permissionMode,
+      effort: agent.currentEffort,
+      tokens: usage.input + usage.output,
+      cost: usage.cost,
+      inputValue: input.value,
+      scroll,
+    })
 
-    // status bar
-    const tokens = usage.input + usage.output
-    const scrollTag = scroll > 0 ? ` | scroll +${scroll}` : ''
-    const status = ` CTA | ${STATE_LABEL[machine.state]}${agent.isBusy ? ' ...' : ''} | ${session.model ?? 'claude'} | ${formatTokens(tokens)} tok | $${usage.cost.toFixed(4)} | ${basename(process.cwd())}${scrollTag} `
-    fb.fillRect(0, 0, cols, 1, 0x20, DEFAULT_COLOR, theme.hudBg)
-    fb.drawText(0, 0, toDisplay(status).slice(0, cols), theme.hudFg, theme.hudBg)
-
-    // chat panel
-    fb.fillRect(0, panelTop, cols, panelH + 1, 0x20, DEFAULT_COLOR, theme.panelBg)
-
-    // transcript (cached; rebuilt on change or resize)
-    const innerW = cols - 2
-    if (cache.rev !== conversation.revision || cache.width !== innerW) {
-      cache = { rev: conversation.revision, width: innerW, lines: buildTranscript(conversation.all, innerW) }
+    // transcript inside the conversation box
+    const layout = computeLayout(cols, rows)
+    if (layout.transcriptH >= 3) {
+      const innerW = cols - 4
+      if (cache.rev !== conversation.revision || cache.width !== innerW) {
+        cache = { rev: conversation.revision, width: innerW, lines: buildTranscript(conversation.all, innerW) }
+      }
+      const total = cache.lines.length
+      const winH = layout.transcriptH - 2
+      if (scroll > 0 && total > prevTotal) scroll += total - prevTotal
+      prevTotal = total
+      view.total = total
+      view.winH = winH
+      clampScroll()
+      const startIdx = Math.max(0, total - winH - scroll)
+      cache.lines.slice(startIdx, startIdx + winH).forEach((line, i) => {
+        drawStyledLine(fb, 2, layout.transcriptTop + 1 + i, line, innerW)
+      })
     }
-    const total = cache.lines.length
-    const winH = panelH
-    if (scroll > 0 && total > prevTotal) scroll += total - prevTotal // hold position as new lines arrive
-    prevTotal = total
-    view.total = total
-    view.winH = winH
-    clampScroll()
 
-    const startIdx = Math.max(0, total - winH - scroll)
-    const visibleLines = cache.lines.slice(startIdx, startIdx + winH)
-    visibleLines.forEach((line, i) => drawStyledLine(fb, 1, panelTop + i, line, innerW))
-
-    // input line + cursor
-    const shown = `> ${input.value}`
-    const maxShown = Math.max(0, cols - 3)
-    const visible = shown.length > maxShown ? shown.slice(shown.length - maxShown) : shown
-    fb.drawText(1, inputRow, visible, theme.assistant, theme.panelBg)
-    fb.set(1 + visible.length, inputRow, 0x20, DEFAULT_COLOR, theme.accent)
-
-    // permission modal (on top)
+    const question = ask.current
+    if (question) {
+      drawModal(fb, cols, rows, {
+        title: 'a question for you',
+        lines: [question.question, '', ...question.options.map((o, i) => `${i + 1}) ${o}`)],
+        footer: `press 1-${question.options.length} to choose   |   Esc to cancel`,
+      })
+    }
     const pending = gate.current
-    if (pending) {
+    if (pending && !question) {
       const more = gate.queued > 1 ? `   (+${gate.queued - 1} more)` : ''
       drawModal(fb, cols, rows, {
         title: `permission required - ${pending.title}`,
@@ -368,6 +391,111 @@ export function run(): void {
   tick()
 }
 
+export interface UiState {
+  cols: number
+  rows: number
+  state: AssistantState
+  busy: boolean
+  model?: string
+  auth?: string
+  mode: PermissionMode
+  effort: string
+  tokens: number
+  cost: number
+  inputValue: string
+  scroll: number
+}
+
+export function computeLayout(cols: number, rows: number) {
+  const headerH = rows >= 14 ? 4 : 3
+  const statusRow = rows - 1
+  const inputTop = statusRow - 3 // 3-row input box
+  const midRows = Math.max(0, inputTop - headerH)
+  let transcriptH = 0
+  if (midRows >= 7) transcriptH = Math.min(16, Math.max(5, Math.floor(midRows * 0.42)))
+  else if (midRows >= 3) transcriptH = midRows
+  const transcriptTop = inputTop - transcriptH
+  return { headerH, statusRow, inputTop, transcriptTop, transcriptH }
+}
+
+export function composeUi(fb: Framebuffer, s: UiState): void {
+  const { cols } = s
+  const layout = computeLayout(cols, s.rows)
+  const model = toDisplay(s.model ?? 'claude')
+
+  // --- header box ---
+  drawBox(fb, 0, 0, cols, layout.headerH, { borderFg: theme.borderFg, bg: theme.panelBg, titleFg: theme.borderTitle })
+  const stateText = STATE_LABEL[s.state] + (s.busy ? ' ...' : '')
+  drawRow(
+    fb,
+    1,
+    `${SYM.logo} CTA ${VERSION}${SYM.sep}${model}${SYM.sep}${planLabel(s.auth)}`,
+    theme.hudFg,
+    stateText,
+    theme.accent,
+    theme.panelBg,
+    2,
+    cols - 3,
+  )
+  if (layout.headerH >= 4) {
+    drawRow(fb, 2, toDisplay(process.cwd()), theme.system, `ask about your code${SYM.sep}/help`, theme.system, theme.panelBg, 2, cols - 3)
+  }
+
+  // --- conversation box (transcript drawn separately in run loop) ---
+  if (layout.transcriptH >= 2) {
+    drawBox(fb, 0, layout.transcriptTop, cols, layout.transcriptH, {
+      borderFg: theme.borderFg,
+      bg: theme.panelBg,
+      title: 'conversation',
+      titleFg: theme.borderTitle,
+    })
+  }
+
+  // --- input box ---
+  drawBox(fb, 0, layout.inputTop, cols, 3, { borderFg: theme.borderFg, bg: theme.panelBg })
+  const iy = layout.inputTop + 1
+  fb.drawText(2, iy, '> ', theme.accent, theme.panelBg)
+  const tx = 4
+  const maxText = Math.max(0, cols - tx - 2)
+  if (s.inputValue.length === 0) {
+    fb.set(tx, iy, 0x20, DEFAULT_COLOR, theme.accent) // cursor block
+    fb.drawText(tx + 1, iy, PLACEHOLDER.slice(0, Math.max(0, maxText - 1)), theme.placeholder, theme.panelBg)
+  } else {
+    const visible = s.inputValue.length > maxText ? s.inputValue.slice(s.inputValue.length - maxText) : s.inputValue
+    fb.drawText(tx, iy, visible, theme.assistant, theme.panelBg)
+    fb.set(tx + visible.length, iy, 0x20, DEFAULT_COLOR, theme.accent)
+  }
+
+  // --- status line ---
+  fb.fillRect(0, layout.statusRow, cols, 1, 0x20, DEFAULT_COLOR, theme.hudBg)
+  const cancelHint = s.busy ? `${SYM.sep}Esc cancels` : ''
+  const left = `${SYM.mode} ${modeLabel(s.mode)}  (shift+tab)${cancelHint}`
+  const scrollTag = s.scroll > 0 ? `${SYM.sep}scroll +${s.scroll}` : ''
+  const right = `${SYM.dot} ${s.effort}${SYM.sep}${STATE_LABEL[s.state]}${SYM.sep}${model}${SYM.sep}${formatTokens(s.tokens)} tok${SYM.sep}$${s.cost.toFixed(4)}${scrollTag}`
+  drawRow(fb, layout.statusRow, left, theme.warn, right, theme.system, theme.hudBg, 1, cols - 2)
+}
+
+// Draw a left-aligned and a right-aligned string on the same row within [x0, x1].
+function drawRow(
+  fb: Framebuffer,
+  y: number,
+  left: string,
+  leftFg: number,
+  right: string,
+  rightFg: number,
+  bg: number | undefined,
+  x0: number,
+  x1: number,
+): void {
+  const width = x1 - x0 + 1
+  if (width <= 0) return
+  const r = right.slice(0, width)
+  const rightX = x1 - r.length + 1
+  const leftMax = Math.max(0, rightX - x0 - 1)
+  if (leftMax > 0) fb.drawText(x0, y, left.slice(0, leftMax), leftFg, bg ?? theme.panelBg)
+  if (r.length > 0) fb.drawText(rightX, y, r, rightFg, bg ?? theme.panelBg)
+}
+
 function drawStyledLine(fb: Framebuffer, x: number, y: number, line: StyledLine, maxW: number): void {
   let used = 0
   for (const span of line.spans) {
@@ -382,4 +510,36 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
   return String(n)
+}
+
+function prettyTool(name: string): string {
+  return name.startsWith('mcp__') ? (name.split('__').pop() ?? name) : name
+}
+
+function planLabel(auth?: string): string {
+  switch (auth) {
+    case 'oauth':
+      return 'subscription'
+    case 'user':
+    case 'project':
+    case 'org':
+      return 'api key'
+    case 'temporary':
+      return 'temp key'
+    default:
+      return auth ?? 'auth: -'
+  }
+}
+
+function modeLabel(mode: PermissionMode): string {
+  switch (mode) {
+    case 'acceptEdits':
+      return 'auto-accept edits'
+    case 'bypass':
+      return 'bypass permissions'
+    case 'plan':
+      return `plan${SYM.sep}read-only`
+    default:
+      return 'ask before writes'
+  }
 }

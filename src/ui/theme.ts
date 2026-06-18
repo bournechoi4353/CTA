@@ -20,4 +20,10 @@ export const theme = {
 
   ok: rgb(120, 210, 150),
   warn: rgb(240, 180, 120),
+
+  borderFg: rgb(78, 84, 104),
+  borderTitle: rgb(150, 210, 255),
+  placeholder: rgb(92, 92, 112),
+  asciiBorders: false,
 }
+

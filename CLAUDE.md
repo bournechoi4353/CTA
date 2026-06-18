@@ -4,7 +4,31 @@ Guidance for Claude Code (and any AI agent) working in this repo.
 
 ## Status
 
-**Phase 5 built — compositor & UX.** The chat panel renders **markdown**
+**Phase 5 + Claude-Code-style layout built.** North star: **"Claude Code, but
+mine"** — a Claude-Agent-SDK coding assistant with the user's living art as the
+centerpiece, **no mascot**. The UI is now a calm **bordered layout**: a rounded
+**header box** (`✦ CTA · model · plan · cwd · tips`), the **flow-field art band**
+in the middle (the centerpiece), a titled **conversation box**, a **input box**
+with placeholder, and a **status line** (`▸ permission-mode (shift+tab to cycle) ·
+state · model · tokens · cost`). Box widget: [src/ui/box.ts](src/ui/box.ts);
+rounded Unicode by default, ASCII fallback via `theme.asciiBorders`. **Permission
+modes** cycle with `shift+tab`: ask-before-writes → auto-accept-edits → bypass →
+plan/read-only ([src/agent/permissions.ts](src/agent/permissions.ts)). Render
+output is **ASCII + a curated chrome glyph set** (box-drawing plus `· ✦ ▸ ●`);
+arbitrary model output is still sanitized to ASCII — verified 0 control bytes / no
+stray glyphs. The compositor is `composeUi()` in [src/app.ts](src/app.ts).
+
+**Agent capabilities (added on top):** the agent can **ask the user preference
+questions** via an in-process `ask_user` tool ([src/agent/ask.ts](src/agent/ask.ts))
+rendered as a numbered modal — the built-in `AskUserQuestion` is disallowed so
+ours is used. A running turn can be **cancelled** with `Esc` (`Options.abortController`
++ `agent.cancel()`). The model's **thinking level / effort** is set with
+`/effort [low|medium|high|xhigh|max]` (`Options.effort`), shown in the status line.
+`zod` is now a dependency (for the `ask_user` tool schema). These are wired and
+typecheck against the SDK, but the *live* behavior (model choosing to ask, abort
+actually interrupting, effort applied) needs a real run to confirm.
+
+Underneath, the chat renders **markdown**
 ([src/ui/markdown.ts](src/ui/markdown.ts)) — fenced code blocks, headers,
 bullets, inline `code`/**bold** — as colored spans
 ([src/ui/spans.ts](src/ui/spans.ts)) over a cached, **scrollable** transcript
@@ -98,11 +122,12 @@ src/
     assistantState.ts # state enum + machine                              ✓
     driver.ts         # state → interpolated visual params                ✓
   agent/
-    client.ts         # AgentSession: query() turns, resume/reset, gating     ✓
-    events.ts         # SDKMessage → state + text + usage                      ✓
+    client.ts         # AgentSession: turns, resume, gating, effort, cancel    ✓
+    events.ts         # SDKMessage → state + text + usage + notices            ✓
+    ask.ts            # ask_user preference-question controller                ✓
     conversation.ts   # chat transcript model (+ revision counter)             ✓
     debug.ts          # CTA_DEBUG raw-message log                              ✓
-    permissions.ts    # write/Bash approval gate (queue, always-allow)         ✓
+    permissions.ts    # write/Bash gate (queue, always-allow, mode cycle)      ✓
     sessionStore.ts   # persist last session id per project                    ✓
   ui/
     input.ts          # raw-mode line editor + history recall                  ✓
@@ -112,7 +137,8 @@ src/
     wrap.ts           # plain word-wrap helper                                 ✓
     text.ts           # sanitize text -> safe single-width ASCII               ✓
     modal.ts          # ASCII approval-modal box                               ✓
-    theme.ts          # named colors (Phase 6 makes swappable)                 ✓
+    box.ts            # rounded/ascii bordered boxes + chrome symbols          ✓
+    theme.ts          # named colors + border/placeholder (Phase 6 swappable)  ✓
   config/
     config.ts         # (Phase 6)
 PLAN.md   CLAUDE.md   CREDITS.md

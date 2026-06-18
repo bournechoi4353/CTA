@@ -13,6 +13,12 @@ interface Entry {
   resolve: (result: PermissionResult) => void
 }
 
+export type PermissionMode = 'default' | 'acceptEdits' | 'bypass' | 'plan'
+
+const MODE_ORDER: PermissionMode[] = ['default', 'acceptEdits', 'bypass', 'plan']
+
+const EDIT_TOOLS = new Set(['edit', 'write', 'multiedit', 'notebookedit'])
+
 /**
  * Mediates tool-permission requests between the Agent SDK and the TUI. The SDK
  * calls {@link request} (via `canUseTool`) and awaits the returned promise; the
@@ -23,6 +29,7 @@ interface Entry {
 export class PermissionGate {
   private readonly queue: Entry[] = []
   private readonly always = new Set<string>()
+  private mode: PermissionMode = 'default'
 
   get current(): PendingPermission | null {
     return this.queue[0]?.pending ?? null
@@ -32,8 +39,24 @@ export class PermissionGate {
     return this.queue.length
   }
 
+  get permissionMode(): PermissionMode {
+    return this.mode
+  }
+
+  /** Cycle default → acceptEdits → bypass → plan (the shift+tab control). */
+  cycleMode(): void {
+    this.mode = MODE_ORDER[(MODE_ORDER.indexOf(this.mode) + 1) % MODE_ORDER.length]!
+  }
+
   request(toolName: string, input: Record<string, unknown>): Promise<PermissionResult> {
     if (this.always.has(toolName)) return Promise.resolve({ behavior: 'allow' })
+    if (this.mode === 'bypass') return Promise.resolve({ behavior: 'allow' })
+    if (this.mode === 'plan') {
+      return Promise.resolve({ behavior: 'deny', message: 'Plan mode is read-only — switch off plan to make changes.' })
+    }
+    if (this.mode === 'acceptEdits' && EDIT_TOOLS.has(toolName.toLowerCase())) {
+      return Promise.resolve({ behavior: 'allow' })
+    }
     return new Promise<PermissionResult>((resolve) => {
       this.queue.push({
         pending: { toolName, title: toolName, detail: describe(toolName, input) },
@@ -51,6 +74,13 @@ export class PermissionGate {
         ? { behavior: 'deny', message: 'Denied by the user.' }
         : { behavior: 'allow' },
     )
+  }
+
+  /** Resolve every pending request as denied (used when a turn is cancelled). */
+  cancelAll(): void {
+    while (this.queue.length > 0) {
+      this.queue.shift()!.resolve({ behavior: 'deny', message: 'Cancelled.' })
+    }
   }
 }
 

@@ -15,6 +15,8 @@ export interface AgentHandlers {
   onResult(text: string, isError: boolean): void
   /** Token + cost usage for a completed turn. */
   onUsage?(usage: { input: number; output: number; costUsd: number }): void
+  /** A transient system notice (e.g. "cancelled"). */
+  onNotice?(text: string): void
 }
 
 // Content blocks are typed loosely on purpose: we only read a few fields and
