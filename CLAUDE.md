@@ -4,20 +4,26 @@ Guidance for Claude Code (and any AI agent) working in this repo.
 
 ## Status
 
-**Phase 2 complete — reactive visualizer + state machine.** On top of the render
-engine ([src/render/](src/render/)) there's now an assistant **state machine**
-([src/state/assistantState.ts](src/state/assistantState.ts)) and a **driver**
-([src/state/driver.ts](src/state/driver.ts)) that smoothly interpolates per-state
-visual params, plus the signature **flow-field** effect
-([src/effects/flowField.ts](src/effects/flowField.ts)) that reads them.
-`npm run dev` shows it morphing between states — faked via number keys `1`-`5`
-(idle / thinking / tool / responding / error); `Tab` cycles scenes (flowfield /
-plasma / starfield); `space`/`d`/`q` as before.
+**Phase 3 built — the assistant is wired in ("it's alive").** Typing a question
+runs a Claude Agent SDK turn ([src/agent/](src/agent/)); its streamed
+`SDKMessage`s drive the state machine via
+[src/agent/events.ts](src/agent/events.ts) (init→thinking, tool_use→tool,
+text→responding, result→idle), so the flow-field "face" reacts live while the
+answer prints in a transcript/input panel below it. Auth resolves from the
+environment — `ANTHROPIC_API_KEY` **or** a logged-in `claude` subscription
+(`apiKeySource`, shown in the status bar). **Scope is read-only**: Read/Glob/Grep
+auto-approved, writes/Bash denied until Phase 4. `CTA_DEBUG=/path` logs raw agent
+messages.
 
-**Next: Phase 3 — wire the Claude Agent SDK** so real agent events drive the
-state machine, and resolve auth Decision #1 (see [PLAN.md](PLAN.md)). Sections
-below describing later phases are intent, not fact yet — update this file as each
-phase lands.
+> ⚠️ **The live round-trip (a real Claude response) is NOT yet confirmed in-repo**
+> — it needs auth + network, which the build environment lacks. Everything else
+> is verified headlessly (typecheck against the SDK, the event→state mapping,
+> input/transcript/sanitizer, the ASCII-only render invariant). On the first real
+> run, if a state doesn't fire correctly the SDK's actual message shape is in the
+> `CTA_DEBUG` log — adjust [src/agent/events.ts](src/agent/events.ts).
+
+**Next: Phase 4 — the write/Bash approval gate** (see [PLAN.md](PLAN.md)).
+Sections below describing later phases are intent, not fact yet.
 
 ## What CTA is
 
@@ -92,14 +98,16 @@ src/
     assistantState.ts # state enum + machine                              ✓
     driver.ts         # state → interpolated visual params                ✓
   agent/
-    client.ts         # Agent SDK query() wiring
-    events.ts         # stream → state transitions
-    permissions.ts    # canUseTool gate
+    client.ts         # AgentSession: query() turns, resume, read-only tools  ✓
+    events.ts         # SDKMessage → state transitions + text                  ✓
+    conversation.ts   # chat transcript model                                  ✓
+    debug.ts          # CTA_DEBUG raw-message log                              ✓
+    permissions.ts    # full write/Bash approval gate (Phase 4)
   ui/
-    layout.ts         # compositor: visualizer + transcript + input
-    transcript.ts
-    input.ts          # raw-mode line editor
-    statusline.ts
+    input.ts          # raw-mode line editor                                   ✓
+    transcript.ts     # word-wrap + render lines                               ✓
+    text.ts           # sanitize text → safe single-width ASCII                ✓
+    layout.ts/statusline.ts  # dedicated compositor (Phase 5; inline in app for now)
   config/
     config.ts
     themes.ts
@@ -196,12 +204,15 @@ Verified facts (confirm specifics against the installed SDK when we get there):
   `{behavior:"allow"}` / `{behavior:"deny", message}`, and/or `permissionMode`
   (`default` | `acceptEdits` | `plan` | `bypassPermissions`). Our TUI renders the
   callback as an approval modal.
-- **Event → state mapping (intended):** `system/init → idle`,
-  `assistant` text → `responding`, `tool_use` start → `tool-running`,
-  `result` → `idle`. ⚠️ The TS SDK does **not** publish a complete event-type
-  enum — **verify exact message shapes empirically in Phase 3** by logging the
-  raw stream, then pin the mapping in `agent/events.ts`. Do not hard-code event
-  names from memory.
+- **Event → state mapping (implemented in [src/agent/events.ts](src/agent/events.ts)):**
+  the stream is `AsyncGenerator<SDKMessage>`; discriminate on `msg.type` —
+  `system`/`subtype:'init'` → thinking (carries `model`, `cwd`, `apiKeySource`,
+  `tools`), `assistant` (read `msg.message.content[]` blocks: `text` →
+  responding, `tool_use` → tool, `thinking` → thinking), `user` (tool_result) →
+  thinking, `result`/`subtype:'success'` → idle (`.result` is the final text) /
+  error subtypes → error. Content blocks are typed loosely on purpose (the beta
+  block union is large). Still **confirm against a live run via `CTA_DEBUG`** —
+  shapes weren't runnable in the build env.
 - **MCP** (later): configured via `options.mcpServers` (`{ command, args, env }`
   or `{ type:"http"|"sse", url, headers }`); tools surface as `mcp__<server>__*`.
 

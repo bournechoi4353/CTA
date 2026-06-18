@@ -48,4 +48,18 @@ export class Framebuffer {
       cx += 1
     }
   }
+
+  /** Fill a rectangle with a glyph + colors (clipped to bounds). */
+  fillRect(x: number, y: number, w: number, h: number, glyph: number, fg: number, bg: number = DEFAULT_COLOR): void {
+    const x1 = Math.min(this.width, x + w)
+    const y1 = Math.min(this.height, y + h)
+    for (let cy = Math.max(0, y); cy < y1; cy++) {
+      for (let cx = Math.max(0, x); cx < x1; cx++) {
+        const i = cy * this.width + cx
+        this.glyph[i] = glyph
+        this.fg[i] = fg
+        this.bg[i] = bg
+      }
+    }
+  }
 }

@@ -61,7 +61,7 @@ Driven by *faked* state transitions for now (press keys to switch states).
 - **Done when:** the field visibly morphs between idle / thinking / responding
   as you fake the states.
 
-### Phase 3 — Agent integration · **M** · 🚀 "IT'S ALIVE"
+### Phase 3 — Agent integration · **M** · 🚀 ✅ built (confirm live)
 Wire `@anthropic-ai/claude-agent-sdk`'s `query()` loop. Map its streamed
 messages to real state transitions (init→idle, assistant text→responding,
 tool_use→tool-running, result→idle). Minimal transcript pane + input line.
