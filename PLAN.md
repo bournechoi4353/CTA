@@ -51,7 +51,7 @@ resize handling; 256-color fallback.
 - **Done when:** a stress scene (moving gradient / starfield) holds a stable
   30–60fps with zero flicker and survives terminal resize.
 
-### Phase 2 — First reactive effect + state model · **M**
+### Phase 2 — First reactive effect + state model · **M** · ✅ done
 One signature effect — **flow-field particles** (port the math from the
 **AsciiCreativeCoding** reference — see *Reference resources*) — plus the
 assistant **state

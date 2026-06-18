@@ -4,18 +4,20 @@ Guidance for Claude Code (and any AI agent) working in this repo.
 
 ## Status
 
-**Phase 1 complete — diff-based render engine.** What exists today: the terminal
-control layer ([src/terminal.ts](src/terminal.ts)) and a double-buffered
-truecolor renderer ([src/render/](src/render/)) that diffs consecutive frames
-and emits minimal ANSI — cursor moves only across gaps, SGR only on color
-change, one `stdout.write` per frame, 256-color fallback via `CTA_COLOR=256`.
-Two stress scenes ([src/effects/](src/effects/): plasma + starfield) drive it;
-`npm run dev` shows them with a HUD (`Tab` switch, `space` pause, `d` debug,
-`q` quit).
+**Phase 2 complete — reactive visualizer + state machine.** On top of the render
+engine ([src/render/](src/render/)) there's now an assistant **state machine**
+([src/state/assistantState.ts](src/state/assistantState.ts)) and a **driver**
+([src/state/driver.ts](src/state/driver.ts)) that smoothly interpolates per-state
+visual params, plus the signature **flow-field** effect
+([src/effects/flowField.ts](src/effects/flowField.ts)) that reads them.
+`npm run dev` shows it morphing between states — faked via number keys `1`-`5`
+(idle / thinking / tool / responding / error); `Tab` cycles scenes (flowfield /
+plasma / starfield); `space`/`d`/`q` as before.
 
-**Next: Phase 2 — first reactive effect + assistant state machine** (see
-[PLAN.md](PLAN.md)). Sections below describing later phases are intent, not fact
-yet — update this file as each phase lands.
+**Next: Phase 3 — wire the Claude Agent SDK** so real agent events drive the
+state machine, and resolve auth Decision #1 (see [PLAN.md](PLAN.md)). Sections
+below describing later phases are intent, not fact yet — update this file as each
+phase lands.
 
 ## What CTA is
 
@@ -84,11 +86,11 @@ src/
     types.ts          # Effect interface                                   ✓
     plasma.ts         # full-frame stress scene                            ✓
     starfield.ts      # sparse-diff stress scene                           ✓
-    flowField.ts      # first *reactive* effect (Phase 2)
+    flowField.ts      # reactive flow-field (state-driven)                ✓
     ...               # more effects (Phase 6)
   state/
-    assistantState.ts # state enum + machine
-    driver.ts         # state → effect params
+    assistantState.ts # state enum + machine                              ✓
+    driver.ts         # state → interpolated visual params                ✓
   agent/
     client.ts         # Agent SDK query() wiring
     events.ts         # stream → state transitions
