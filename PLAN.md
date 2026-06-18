@@ -61,7 +61,7 @@ Driven by *faked* state transitions for now (press keys to switch states).
 - **Done when:** the field visibly morphs between idle / thinking / responding
   as you fake the states.
 
-### Phase 3 — Agent integration · **M** · 🚀 ✅ built (confirm live)
+### Phase 3 — Agent integration · **M** · 🚀 ✅ done (live-confirmed)
 Wire `@anthropic-ai/claude-agent-sdk`'s `query()` loop. Map its streamed
 messages to real state transitions (init→idle, assistant text→responding,
 tool_use→tool-running, result→idle). Minimal transcript pane + input line.
@@ -69,7 +69,7 @@ tool_use→tool-running, result→idle). Minimal transcript pane + input line.
 - **Done when:** you type a question, the art reacts *live* as Claude thinks and
   responds, and the answer prints. First true end-to-end slice.
 
-### Phase 4 — Coding tools + permission gate · **M**
+### Phase 4 — Coding tools + permission gate · **M** · ✅ built (confirm live)
 Enable `Read / Write / Edit / Bash / Grep / Glob`. Render a `canUseTool`
 approval modal in the TUI; give tool execution its own distinct visual state.
 - **Done when:** "what does this function do?" / "refactor X" works in a real

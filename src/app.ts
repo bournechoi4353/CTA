@@ -16,9 +16,11 @@ import { VisualDriver } from './state/driver'
 import { AgentSession } from './agent/client'
 import type { AgentHandlers } from './agent/events'
 import { Conversation, type Role } from './agent/conversation'
+import { PermissionGate } from './agent/permissions'
 import { InputLine } from './ui/input'
 import { transcriptLines } from './ui/transcript'
 import { toDisplay } from './ui/text'
+import { drawModal } from './ui/modal'
 
 const TARGET_FPS = 30
 const FRAME_MS = 1000 / TARGET_FPS
@@ -68,7 +70,8 @@ export function run(): void {
   const driver = new VisualDriver()
   const conversation = new Conversation()
   const input = new InputLine()
-  const agent = new AgentSession()
+  const gate = new PermissionGate()
+  const agent = new AgentSession(gate)
   const session: { model?: string; auth?: string } = {}
   let assistantTextThisTurn = false
 
@@ -125,6 +128,13 @@ export function run(): void {
   const offKey = term.onKey((key) => {
     if (key === '\x03') {
       quit = true
+      return
+    }
+    // While a tool permission is pending, keys drive the modal, not the input.
+    if (gate.current) {
+      if (key === 'y' || key === 'Y') gate.decide('allow')
+      else if (key === 'a' || key === 'A') gate.decide('always')
+      else if (key === 'n' || key === 'N' || key === '\x1b') gate.decide('deny')
       return
     }
     if (input.handle(key) !== 'submit') return
@@ -232,6 +242,17 @@ export function run(): void {
     const visible = shown.length > maxShown ? shown.slice(shown.length - maxShown) : shown
     fb.drawText(1, inputRow, visible, TEXT_ASSISTANT, PANEL_BG)
     fb.set(1 + visible.length, inputRow, 0x20, DEFAULT_COLOR, ACCENT)
+
+    // Permission modal (over everything) when a tool is awaiting approval.
+    const pending = gate.current
+    if (pending) {
+      const more = gate.queued > 1 ? `   (+${gate.queued - 1} more)` : ''
+      drawModal(fb, cols, rows, {
+        title: `permission required - ${pending.title}`,
+        lines: pending.detail,
+        footer: `[y] allow   [a] always allow   [n] deny${more}`,
+      })
+    }
 
     stats = renderer.flush()
     frame += 1

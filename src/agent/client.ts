@@ -1,20 +1,24 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
-import type { Options, PermissionResult } from '@anthropic-ai/claude-agent-sdk'
+import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import { mapMessage, type AgentHandlers } from './events'
+import type { PermissionGate } from './permissions'
 import { debugLog } from './debug'
 
-// Phase 3 is read-only: the assistant can read code and answer, but writes and
-// shell commands are denied until Phase 4 builds the approval gate.
-const READ_ONLY_TOOLS = ['Read', 'Glob', 'Grep']
+// Reads are auto-approved (no prompt). Everything else — Write, Edit, Bash, … —
+// is available to the model but routed through the gate (the approval modal).
+const AUTO_ALLOW_TOOLS = ['Read', 'Glob', 'Grep']
 
 /**
  * A multi-turn agent conversation over the Claude Agent SDK. Each `send()` runs
  * one turn (a `query()` stream), resuming the prior session so context carries
- * across turns. Messages are mapped to state/text via {@link mapMessage}.
+ * across turns. Messages map to state/text via {@link mapMessage}; tool
+ * permissions go through the {@link PermissionGate}.
  */
 export class AgentSession {
   private sessionId: string | null = null
   private busy = false
+
+  constructor(private readonly gate: PermissionGate) {}
 
   get isBusy(): boolean {
     return this.busy
@@ -26,15 +30,9 @@ export class AgentSession {
     try {
       const options: Options = {
         cwd: process.cwd(),
-        allowedTools: [...READ_ONLY_TOOLS],
+        allowedTools: [...AUTO_ALLOW_TOOLS],
         permissionMode: 'default',
-        canUseTool: async (toolName: string): Promise<PermissionResult> => {
-          if (READ_ONLY_TOOLS.includes(toolName)) return { behavior: 'allow' }
-          return {
-            behavior: 'deny',
-            message: `"${toolName}" isn't enabled yet — writes and commands arrive in Phase 4, behind an approval gate.`,
-          }
-        },
+        canUseTool: (toolName, input) => this.gate.request(toolName, input),
         stderr: (data: string) => debugLog('cli-stderr', data),
       }
       if (this.sessionId) options.resume = this.sessionId

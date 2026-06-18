@@ -4,26 +4,27 @@ Guidance for Claude Code (and any AI agent) working in this repo.
 
 ## Status
 
-**Phase 3 built — the assistant is wired in ("it's alive").** Typing a question
-runs a Claude Agent SDK turn ([src/agent/](src/agent/)); its streamed
-`SDKMessage`s drive the state machine via
-[src/agent/events.ts](src/agent/events.ts) (init→thinking, tool_use→tool,
-text→responding, result→idle), so the flow-field "face" reacts live while the
-answer prints in a transcript/input panel below it. Auth resolves from the
-environment — `ANTHROPIC_API_KEY` **or** a logged-in `claude` subscription
-(`apiKeySource`, shown in the status bar). **Scope is read-only**: Read/Glob/Grep
-auto-approved, writes/Bash denied until Phase 4. `CTA_DEBUG=/path` logs raw agent
-messages.
+**Phase 4 built — full toolset behind an approval gate.** Building on Phase 3's
+live agent wiring ([src/agent/](src/agent/)), the model can now use
+Write/Edit/Bash/etc. (Read/Glob/Grep stay auto-approved). Every other tool call
+is routed through the **[PermissionGate](src/agent/permissions.ts)** and shown as
+an ASCII approval **modal** ([src/ui/modal.ts](src/ui/modal.ts)): `y` allow,
+`a` always-allow (this session), `n`/Esc deny. `canUseTool` returns a promise the
+gate resolves on your keypress, so the visualizer keeps animating while it waits;
+parallel requests queue. Auth (env `ANTHROPIC_API_KEY` or logged-in `claude`
+subscription, shown in the status bar) is unchanged from Phase 3. `CTA_DEBUG=/path`
+logs raw agent messages.
 
-> ⚠️ **The live round-trip (a real Claude response) is NOT yet confirmed in-repo**
-> — it needs auth + network, which the build environment lacks. Everything else
-> is verified headlessly (typecheck against the SDK, the event→state mapping,
-> input/transcript/sanitizer, the ASCII-only render invariant). On the first real
-> run, if a state doesn't fire correctly the SDK's actual message shape is in the
-> `CTA_DEBUG` log — adjust [src/agent/events.ts](src/agent/events.ts).
+> ⚠️ **Not yet confirmed live:** that the SDK calls `canUseTool` for writes/Bash
+> and that approval actually runs the tool — needs a real turn that triggers one.
+> Phase 3's live round-trip *is* confirmed. Gate logic (allow/always/deny/queue),
+> modal rendering, the event→state mapping, and the ASCII-render invariant are all
+> verified headlessly. If a write doesn't prompt as expected, check the
+> `CTA_DEBUG` log and [src/agent/client.ts](src/agent/client.ts) (permissionMode).
 
-**Next: Phase 4 — the write/Bash approval gate** (see [PLAN.md](PLAN.md)).
-Sections below describing later phases are intent, not fact yet.
+**Next: Phase 5 — the real compositor & UX** (scrollback, status line, code-block
+rendering, slash commands, session resume) — see [PLAN.md](PLAN.md). Sections
+below describing later phases are intent, not fact yet.
 
 ## What CTA is
 
@@ -102,11 +103,13 @@ src/
     events.ts         # SDKMessage → state transitions + text                  ✓
     conversation.ts   # chat transcript model                                  ✓
     debug.ts          # CTA_DEBUG raw-message log                              ✓
-    permissions.ts    # full write/Bash approval gate (Phase 4)
+    permissions.ts    # write/Bash approval gate (queue, always-allow)         ✓
   ui/
     input.ts          # raw-mode line editor                                   ✓
-    transcript.ts     # word-wrap + render lines                               ✓
+    transcript.ts     # labelled, word-wrapped transcript lines                ✓
+    wrap.ts           # word-wrap helper                                       ✓
     text.ts           # sanitize text → safe single-width ASCII                ✓
+    modal.ts          # ASCII approval-modal box                               ✓
     layout.ts/statusline.ts  # dedicated compositor (Phase 5; inline in app for now)
   config/
     config.ts
