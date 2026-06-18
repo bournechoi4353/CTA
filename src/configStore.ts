@@ -8,6 +8,7 @@ export interface CtaConfig {
   scene?: string
   effort?: string
   asciiBorders?: boolean
+  permissionMode?: string
 }
 
 const DIR = join(homedir(), '.cta')

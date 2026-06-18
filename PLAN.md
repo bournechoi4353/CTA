@@ -93,6 +93,19 @@ Global `cta` command, config dir, README, graceful degradation on limited
 terminals, error/reconnect handling.
 - **Done when:** install it and run `cta` in any repo.
 
+### Phase 8 — Make it less passive (the art should *do* something) · ✅ built
+
+**8a — Event-reactive art** — the visualizer reads the live event stream: each
+tool fires a colored **ripple** (Read=cyan, Edit=green, Bash=orange…), **effort**
+scales motion (`low` = calm, `max` = storm), **errors glitch** the field, turn
+events burst. The art becomes readable.
+
+**8b — Coding cockpit: diffs + syntax** — when the agent edits, render the live
+`- old / + new` **diff** in the transcript; **syntax-highlight** code blocks.
+
+**8c — Keystroke ripples** — typing sends ripples up into the art — the biggest
+"feels alive" touch. (Shares the fx channel with 8a.)
+
 ---
 
 ## Dependency chain

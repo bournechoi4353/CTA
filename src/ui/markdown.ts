@@ -2,6 +2,7 @@ import { theme } from './theme'
 import { toDisplay } from './text'
 import { wrapText } from './wrap'
 import { wrapSpans, type Span, type StyledLine } from './spans'
+import { highlightCode } from './syntax'
 
 /**
  * A pragmatic markdown renderer → styled lines. Handles fenced code blocks
@@ -20,7 +21,7 @@ export function renderMarkdown(text: string, width: number, bg: number): StyledL
     }
     if (inCode) {
       const body = raw.length > width - 1 ? raw.slice(0, width - 1) : raw
-      out.push({ spans: [{ text: ` ${body}`, fg: theme.code, bg: theme.codeBg }] })
+      out.push({ spans: highlightCode(` ${body}`, theme.codeBg) })
       continue
     }
 

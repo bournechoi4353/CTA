@@ -12,6 +12,8 @@ export interface FrameInfo {
   frame: number
   width: number
   height: number
+  /** Motion multiplier from the effort/thinking level (low ~0.5 .. max ~1.6). */
+  energy: number
   /** The assistant's current discrete state. */
   state: AssistantState
   /** Smoothly-interpolated visual knobs for the current state. */

@@ -1,5 +1,5 @@
 import { query, tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
-import type { Options } from '@anthropic-ai/claude-agent-sdk'
+import type { Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 import { mapMessage, type AgentHandlers } from './events'
 import type { PermissionGate } from './permissions'
@@ -13,15 +13,19 @@ export const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 const AUTO_ALLOW_TOOLS = ['Read', 'Glob', 'Grep', 'mcp__cta__ask_user']
 
 /**
- * A multi-turn agent conversation over the Claude Agent SDK. Each `send()` runs
- * one turn (a `query()` stream) and can be cancelled mid-flight via `cancel()`.
- * Tool permissions go through the {@link PermissionGate}; preference questions
- * go through the {@link AskController} (our in-process `ask_user` tool).
+ * A multi-turn agent conversation over the Claude Agent SDK.
+ *
+ * IMPORTANT: `canUseTool` (our permission gate) only works in *streaming input
+ * mode* — the SDK can't invoke permission callbacks when `prompt` is a string.
+ * So each turn feeds the user message as an async generator and holds the input
+ * stream open until the turn's `result` arrives. (A string prompt makes
+ * Write/Edit/Bash error while auto-approved tools still work.)
  */
 export class AgentSession {
   private sessionId: string | null = null
   private busy = false
   private aborter: AbortController | null = null
+  private endTurn: (() => void) | null = null
   private effort: Effort = 'high'
   private readonly mcpServer
 
@@ -68,6 +72,7 @@ export class AgentSession {
   /** Interrupt the in-flight turn (if any) and unblock any pending prompts. */
   cancel(): void {
     this.aborter?.abort()
+    this.endTurn?.()
     this.gate.cancelAll()
     this.ask.cancelAll()
   }
@@ -77,24 +82,43 @@ export class AgentSession {
     this.busy = true
     const ac = new AbortController()
     this.aborter = ac
+
+    let resolveTurn: () => void = () => {}
+    const turnComplete = new Promise<void>((resolve) => {
+      resolveTurn = resolve
+    })
+    this.endTurn = resolveTurn
+
+    // Streaming input: yield the user message, then hold the stream open until
+    // the turn completes (resolveTurn). canUseTool requires this mode.
+    const input = (async function* (): AsyncGenerator<SDKUserMessage> {
+      yield {
+        type: 'user',
+        message: { role: 'user', content: prompt },
+        parent_tool_use_id: null,
+      }
+      await turnComplete
+    })()
+
     try {
       const options: Options = {
         cwd: process.cwd(),
         abortController: ac,
         effort: this.effort,
         allowedTools: [...AUTO_ALLOW_TOOLS],
-        disallowedTools: ['AskUserQuestion'], // use our renderable ask_user instead
+        disallowedTools: ['AskUserQuestion'],
         permissionMode: 'default',
-        canUseTool: (toolName, input) => this.gate.request(toolName, input),
+        canUseTool: (toolName, toolInput) => this.gate.request(toolName, toolInput),
         mcpServers: { cta: this.mcpServer },
         stderr: (data: string) => debugLog('cli-stderr', data),
       }
       if (this.sessionId) options.resume = this.sessionId
 
-      for await (const msg of query({ prompt, options })) {
+      for await (const msg of query({ prompt: input, options })) {
         const sid = (msg as { session_id?: unknown }).session_id
         if (typeof sid === 'string' && sid.length > 0) this.sessionId = sid
         mapMessage(msg, handlers)
+        if (msg.type === 'result') resolveTurn() // close the input → end the query
       }
       if (ac.signal.aborted) {
         handlers.onState('idle')
@@ -110,8 +134,10 @@ export class AgentSession {
         handlers.onResult(describeError(err), true)
       }
     } finally {
+      resolveTurn() // ensure the input generator is unblocked
       this.busy = false
       this.aborter = null
+      this.endTurn = null
     }
   }
 }

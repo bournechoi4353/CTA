@@ -40,8 +40,8 @@ export class Torus implements Effect {
     const w = this.w
     const h = this.h
     const p = info.params
-    this.a += info.dt * (0.6 + p.speed * 0.8)
-    this.b += info.dt * (0.3 + p.speed * 0.5)
+    this.a += info.dt * (0.6 + p.speed * 0.8) * info.energy
+    this.b += info.dt * (0.3 + p.speed * 0.5) * info.energy
 
     const zbuf = this.zbuf
     const lum = this.lum

@@ -7,8 +7,8 @@ export interface AgentHandlers {
   onState(state: AssistantState): void
   /** A segment of assistant text. */
   onAssistantText(text: string): void
-  /** The agent invoked a tool (e.g. Read). */
-  onToolUse(name: string): void
+  /** The agent invoked a tool (e.g. Read), with its input args. */
+  onToolUse(name: string, input?: Record<string, unknown>): void
   /** The init message — model, cwd, how auth resolved. */
   onSystemInit(info: { model: string; cwd: string; apiKeySource: string; tools: string[] }): void
   /** Turn finished (success or error) — `text` is the final/answer or error. */
@@ -22,7 +22,7 @@ export interface AgentHandlers {
 // Content blocks are typed loosely on purpose: we only read a few fields and
 // don't want to couple to the exact Anthropic beta block union, which can carry
 // many variants. Unknown blocks are ignored.
-type LooseBlock = { type: string; text?: string; name?: string }
+type LooseBlock = { type: string; text?: string; name?: string; input?: Record<string, unknown> }
 
 /**
  * Map one SDK message to state transitions + text. The discrete states come from
@@ -62,7 +62,7 @@ export function mapMessage(msg: SDKMessage, h: AgentHandlers): void {
         if (block.type === 'text' && typeof block.text === 'string') text += block.text
         else if (block.type === 'tool_use') {
           sawTool = true
-          if (block.name) h.onToolUse(block.name)
+          if (block.name) h.onToolUse(block.name, block.input)
         } else if (block.type === 'thinking') {
           sawThinking = true
         }

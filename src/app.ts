@@ -22,6 +22,8 @@ import { buildTranscript } from './ui/transcript'
 import { toDisplay } from './ui/text'
 import { drawModal } from './ui/modal'
 import { drawBox, SYM } from './ui/box'
+import { Fx } from './ui/fx'
+import { formatEditDiff } from './ui/diff'
 import { theme, applyTheme, THEME_NAMES, setBorders } from './ui/theme'
 import { loadConfig, saveConfig } from './configStore'
 import type { StyledLine } from './ui/spans'
@@ -32,6 +34,7 @@ const FRAME_MS = 1000 / TARGET_FPS
 const SMOKE = process.env['CTA_SMOKE'] === '1'
 const SMOKE_FRAMES = 60
 const PLACEHOLDER = 'Ask about your code, or /help'
+const EFFORT_ENERGY: Record<string, number> = { low: 0.5, medium: 0.75, high: 1.0, xhigh: 1.3, max: 1.6 }
 
 const K = {
   ctrlC: '\x03',
@@ -79,6 +82,14 @@ export function run(): void {
   if (config.effort && (EFFORTS as readonly string[]).includes(config.effort)) {
     agent.setEffort(config.effort as Effort)
   }
+  if (config.permissionMode && ['default', 'acceptEdits', 'bypass', 'plan'].includes(config.permissionMode)) {
+    gate.setMode(config.permissionMode as PermissionMode)
+  }
+  const fx = new Fx()
+  const artBand = (): { x0: number; y0: number; x1: number; y1: number } => {
+    const l = computeLayout(cols, rows)
+    return { x0: 0, y0: l.headerH, x1: cols - 1, y1: Math.max(l.headerH, l.transcriptTop - 1) }
+  }
 
   const session: { model?: string; auth?: string } = {}
   const usage = { input: 0, output: 0, cost: 0 }
@@ -99,13 +110,28 @@ export function run(): void {
       : 'Ask about your code. Try "what does src/app.ts do?" or /help for commands.',
   )
 
+  const burst = (hue: number, strength: number, life: number): void => {
+    const b = artBand()
+    fx.ripple((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, hue, { strength, life, maxR: Math.min(cols, rows * 2) * 0.55 })
+  }
+
   const handlers: AgentHandlers = {
-    onState: (state) => machine.set(state),
+    onState: (state) => {
+      if (state === 'error') fx.glitchPulse(1)
+      machine.set(state)
+    },
     onAssistantText: (text) => {
       assistantTextThisTurn = true
       conversation.appendToLast('assistant', toDisplay(text))
     },
-    onToolUse: (name) => conversation.add('system', `${SYM.mode} ${toDisplay(prettyTool(name))}`),
+    onToolUse: (name, input) => {
+      conversation.add('system', `${SYM.mode} ${toDisplay(prettyTool(name))}`)
+      burst(toolHue(name), 1.1, 0.9)
+      if (input) {
+        const diff = formatEditDiff(name, input)
+        if (diff) conversation.add('diff', diff)
+      }
+    },
     onSystemInit: (info) => {
       session.model = info.model
       session.auth = info.apiKeySource
@@ -119,6 +145,7 @@ export function run(): void {
     onResult: (text, isError) => {
       if (isError) conversation.add('system', `! ${toDisplay(text)}`)
       else if (!assistantTextThisTurn && text.length > 0) conversation.appendToLast('assistant', toDisplay(text))
+      if (!isError) burst(150, 0.8, 1.2)
       const id = agent.currentSessionId
       if (id) saveSession(process.cwd(), id)
     },
@@ -130,6 +157,7 @@ export function run(): void {
       scene: effects[sceneIndex]?.name,
       effort: agent.currentEffort,
       asciiBorders: theme.asciiBorders,
+      permissionMode: gate.permissionMode,
     })
   }
 
@@ -202,10 +230,22 @@ export function run(): void {
         persist()
         break
       }
+      case 'mode': {
+        const m = rest[0]
+        const valid = ['default', 'acceptEdits', 'bypass', 'plan']
+        if (m && valid.includes(m)) {
+          gate.setMode(m as PermissionMode)
+          conversation.add('system', `permission mode: ${m}`)
+          persist()
+        } else {
+          conversation.add('system', `permission modes: ${valid.join(', ')}  (bypass = full access; or shift+tab to cycle)`)
+        }
+        break
+      }
       case 'help':
         conversation.add(
           'system',
-          'commands: /help /clear /new /resume /scene [name] /theme [name] /borders /state <name> /effort [level] /quit   keys: PgUp/PgDn scroll, Up/Down history, shift+tab permissions, Esc cancels',
+          'commands: /help /clear /new /resume /scene [name] /theme [name] /borders /mode [bypass|acceptEdits|plan] /effort [level] /quit   keys: PgUp/PgDn scroll, shift+tab permissions, Esc cancels',
         )
         break
       default:
@@ -270,6 +310,7 @@ export function run(): void {
     }
     if (key === K.shiftTab) {
       gate.cycleMode()
+      persist()
       return
     }
     const page = Math.max(1, view.winH - 1)
@@ -313,7 +354,13 @@ export function run(): void {
       input.clear()
       return
     }
-    if (input.handle(key) === 'submit') submit()
+    const action = input.handle(key)
+    if (action === 'change') {
+      const b = artBand()
+      fx.ripple(Math.min(cols - 2, 4 + input.value.length), b.y1, 205, { strength: 0.5, life: 0.6, maxR: 8, sat: 0.55 })
+    } else if (action === 'submit') {
+      submit()
+    }
   })
 
   const stop = (): void => {
@@ -347,6 +394,7 @@ export function run(): void {
     simTime += realDt
     machine.update(realDt)
     const params = driver.update(realDt, machine.state)
+    const energy = EFFORT_ENERGY[agent.currentEffort] ?? 1
 
     const effect = effects[sceneIndex]!
     const info: FrameInfo = {
@@ -355,12 +403,16 @@ export function run(): void {
       frame,
       width: cols,
       height: rows,
+      energy,
       state: machine.state,
       params,
     }
 
     const fb = renderer.begin()
     effect.render(fb, info) // the living art fills the screen behind the chrome
+    fx.update(realDt)
+    const band = artBand()
+    fx.draw(fb, band.x0, band.y0, band.x1, band.y1)
 
     composeUi(fb, {
       cols,
@@ -562,6 +614,16 @@ function formatTokens(n: number): string {
 
 function prettyTool(name: string): string {
   return name.startsWith('mcp__') ? (name.split('__').pop() ?? name) : name
+}
+
+function toolHue(name: string): number {
+  const t = name.toLowerCase()
+  if (t.includes('read')) return 190
+  if (t.includes('glob') || t.includes('grep') || t.includes('search')) return 55
+  if (t.includes('edit') || t.includes('write') || t.includes('notebook')) return 135
+  if (t.includes('bash')) return 22
+  if (t.includes('ask')) return 300
+  return 210
 }
 
 function planLabel(auth?: string): string {

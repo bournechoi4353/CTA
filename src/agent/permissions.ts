@@ -48,6 +48,10 @@ export class PermissionGate {
     this.mode = MODE_ORDER[(MODE_ORDER.indexOf(this.mode) + 1) % MODE_ORDER.length]!
   }
 
+  setMode(mode: PermissionMode): void {
+    this.mode = mode
+  }
+
   request(toolName: string, input: Record<string, unknown>): Promise<PermissionResult> {
     if (this.always.has(toolName)) return Promise.resolve({ behavior: 'allow' })
     if (this.mode === 'bypass') return Promise.resolve({ behavior: 'allow' })

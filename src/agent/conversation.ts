@@ -1,4 +1,4 @@
-export type Role = 'user' | 'assistant' | 'system'
+export type Role = 'user' | 'assistant' | 'system' | 'diff'
 
 export interface Turn {
   role: Role

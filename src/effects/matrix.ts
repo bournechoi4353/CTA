@@ -62,7 +62,7 @@ export class Matrix implements Effect {
     const density = clamp01(p.density)
     for (let x = 0; x < w; x++) {
       if (this.colActive[x]! >= density) continue
-      let y = this.dropY[x]! + this.dropSpeed[x]! * (0.4 + p.speed) * dt
+      let y = this.dropY[x]! + this.dropSpeed[x]! * (0.4 + p.speed) * info.energy * dt
       if (y >= h + 2) {
         y = -(this.rand() * h * 0.6)
         this.dropSpeed[x] = 6 + this.rand() * 18

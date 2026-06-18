@@ -22,6 +22,12 @@ const BASE = {
   borderFg: rgb(78, 84, 104),
   borderTitle: rgb(150, 210, 255),
   placeholder: rgb(92, 92, 112),
+  codeKeyword: rgb(150, 180, 255),
+  codeString: rgb(170, 220, 150),
+  codeComment: rgb(110, 120, 135),
+  codeNumber: rgb(230, 185, 130),
+  diffAdd: rgb(120, 210, 150),
+  diffDel: rgb(232, 130, 130),
 }
 
 export const theme = { ...BASE, asciiBorders: false }

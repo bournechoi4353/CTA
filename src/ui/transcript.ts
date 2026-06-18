@@ -20,6 +20,11 @@ export function buildTranscript(turns: readonly Turn[], width: number): StyledLi
         { text: toDisplay(turn.text), fg: theme.user, bg: theme.panelBg },
       ]
       for (const line of wrapSpans(spans, width)) out.push(line)
+    } else if (turn.role === 'diff') {
+      for (const raw of toDisplay(turn.text).split('\n')) {
+        const fg = raw.startsWith('+') ? theme.diffAdd : raw.startsWith('-') ? theme.diffDel : theme.borderTitle
+        for (const line of wrapSpans([{ text: raw, fg, bg: theme.codeBg }], width)) out.push(line)
+      }
     } else {
       const spans = [{ text: toDisplay(turn.text), fg: theme.system, bg: theme.panelBg }]
       for (const line of wrapSpans(spans, width)) out.push(line)

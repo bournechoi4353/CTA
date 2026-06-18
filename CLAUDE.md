@@ -39,6 +39,17 @@ modules read), a `/borders` rounded↔ascii toggle, all persisted to
 on launch. `applyTheme()` reassigns `theme`'s fields in place, so switches
 propagate without re-importing.
 
+**Phase 8 — the art reacts.** A transient **fx** layer ([src/ui/fx.ts](src/ui/fx.ts))
+draws ripples + glitch over the art band: each tool use fires a hue-coded
+**ripple** (Read=cyan, Edit=green, Bash=orange…), **errors glitch** the field,
+turns burst, and **typing sends ripples** up from the input. Effort scales motion
+via `info.energy` (low=calm, max=storm) in the reactive effects. The transcript
+shows **diffs** (a `diff` turn role, red/green, from [src/ui/diff.ts](src/ui/diff.ts))
+when the agent edits, and code blocks are **syntax-highlighted**
+([src/ui/syntax.ts](src/ui/syntax.ts)). All fx/diff/syntax output stays ASCII (the
+render invariant holds). The live feel (ripples on real tool use, diffs on real
+edits) needs a real run to judge, but the wiring typechecks against the SDK.
+
 Underneath, the chat renders **markdown**
 ([src/ui/markdown.ts](src/ui/markdown.ts)) — fenced code blocks, headers,
 bullets, inline `code`/**bold** — as colored spans
@@ -150,6 +161,9 @@ src/
     text.ts           # sanitize text -> safe single-width ASCII               ✓
     modal.ts          # ASCII approval-modal box                               ✓
     box.ts            # rounded/ascii bordered boxes + chrome symbols          ✓
+    fx.ts             # ripples + glitch over the art (events/keystrokes)      ✓
+    syntax.ts         # code-block syntax highlighting                         ✓
+    diff.ts           # edit/write -> red/green diff text                      ✓
     theme.ts          # swappable palettes (nova/matrix/amber/mono)          ✓
   configStore.ts      # persisted prefs: ~/.cta/config.json                   ✓
 PLAN.md   CLAUDE.md   CREDITS.md
@@ -245,6 +259,13 @@ Verified facts (confirm specifics against the installed SDK when we get there):
   `{behavior:"allow"}` / `{behavior:"deny", message}`, and/or `permissionMode`
   (`default` | `acceptEdits` | `plan` | `bypassPermissions`). Our TUI renders the
   callback as an approval modal.
+- **⚠️ `canUseTool` REQUIRES streaming-input mode** — `prompt` must be an
+  `AsyncIterable<SDKUserMessage>`, **not a string**. With a string prompt, every
+  tool that routes through `canUseTool` (Write/Edit/Bash) throws an
+  "environment-level error" while auto-approved tools still work. So
+  [src/agent/client.ts](src/agent/client.ts) yields the user message from an async
+  generator and holds the input open until the turn's `result`. Do **not** revert
+  to a string prompt. (Likewise `setModel`/`setPermissionMode` need streaming input.)
 - **Event → state mapping (implemented in [src/agent/events.ts](src/agent/events.ts)):**
   the stream is `AsyncGenerator<SDKMessage>`; discriminate on `msg.type` —
   `system`/`subtype:'init'` → thinking (carries `model`, `cwd`, `apiKeySource`,

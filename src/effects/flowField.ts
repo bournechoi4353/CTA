@@ -52,7 +52,7 @@ export class FlowField implements Effect {
 
     // Advance the active particles (count scales with density).
     const active = Math.max(1, Math.floor(this.pool * clamp01(p.density)))
-    const speed = 12 * p.speed
+    const speed = 12 * p.speed * info.energy
     const aspect = 0.5 // cells are ~2x tall as wide
 
     for (let i = 0; i < active; i++) {
