@@ -1,0 +1,26 @@
+{
+  "name": "cta",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A terminal-resident coding companion with a reactive ANSI visualizer.",
+  "bin": {
+    "cta": "./dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "dev:watch": "tsx watch src/index.ts",
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

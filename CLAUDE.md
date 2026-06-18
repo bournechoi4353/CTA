@@ -4,10 +4,18 @@ Guidance for Claude Code (and any AI agent) working in this repo.
 
 ## Status
 
-**Pre–Phase 0. There is no source code yet** — only [PLAN.md](PLAN.md) and this
-file. The build proceeds phase-by-phase per PLAN.md. **Update this file as
-phases land** (real commands, real file paths, decisions resolved). Until a
-phase exists, treat the "target" sections below as intent, not fact.
+**Phase 1 complete — diff-based render engine.** What exists today: the terminal
+control layer ([src/terminal.ts](src/terminal.ts)) and a double-buffered
+truecolor renderer ([src/render/](src/render/)) that diffs consecutive frames
+and emits minimal ANSI — cursor moves only across gaps, SGR only on color
+change, one `stdout.write` per frame, 256-color fallback via `CTA_COLOR=256`.
+Two stress scenes ([src/effects/](src/effects/): plasma + starfield) drive it;
+`npm run dev` shows them with a HUD (`Tab` switch, `space` pause, `d` debug,
+`q` quit).
+
+**Next: Phase 2 — first reactive effect + assistant state machine** (see
+[PLAN.md](PLAN.md)). Sections below describing later phases are intent, not fact
+yet — update this file as each phase lands.
 
 ## What CTA is
 
@@ -60,20 +68,23 @@ Phase 3.
 
 ## Target directory layout
 
-Materializes as phases land — do not expect these to exist yet.
+Materializes as phases land. `✓` = exists today (Phase 0); the rest is intent.
 
 ```
 src/
-  index.ts            # bin entry
-  app.ts              # top-level wiring: renderer + state + agent + input
+  index.ts            # bin entry                                         ✓
+  terminal.ts         # alt screen, raw mode, resize, teardown            ✓
+  app.ts              # frame loop + HUD; drives the renderer              ✓
   render/
-    framebuffer.ts    # cell grid, double buffer
-    renderer.ts       # diff + flush, alt screen, cursor, resize
-    color.ts          # truecolor + 256-color fallback
-    glyphs.ts         # density/brightness → glyph ramps
+    framebuffer.ts    # cell grid (typed arrays), double buffer            ✓
+    renderer.ts       # diff two buffers → minimal ANSI; resize            ✓
+    color.ts          # packed RGB, HSV, truecolor + 256 fallback          ✓
+    glyphs.ts         # brightness → glyph ramps                           ✓
   effects/
-    types.ts          # Effect interface
-    flowField.ts      # first effect (Phase 2)
+    types.ts          # Effect interface                                   ✓
+    plasma.ts         # full-frame stress scene                            ✓
+    starfield.ts      # sparse-diff stress scene                           ✓
+    flowField.ts      # first *reactive* effect (Phase 2)
     ...               # more effects (Phase 6)
   state/
     assistantState.ts # state enum + machine
@@ -95,17 +106,18 @@ PLAN.md   CLAUDE.md   CREDITS.md
 
 ## Commands
 
-**None are wired yet** — created in Phase 0. Intended scripts (proposed tooling:
-`tsx` for dev, `tsup`/esbuild for build, TypeScript strict, Node ≥ 20):
+Tooling: `tsx` (dev), `tsup`/esbuild (build), TypeScript strict, Node ≥ 20.
 
 | Command | Purpose |
 |---|---|
-| `npm run dev`        | run with reload (tsx watch) |
-| `npm run build`      | bundle to `dist/` |
-| `npm start`          | run the built binary |
+| `npm run dev`        | run from source via tsx (interactive TUI) |
+| `npm run dev:watch`  | same, reloading on file changes |
+| `npm run build`      | bundle to `dist/` (tsup) |
+| `npm start`          | run the built binary (`node dist/index.js`) |
 | `npm run typecheck`  | `tsc --noEmit` |
 
-After Phase 0, replace this table with what actually exists.
+Headless check: `CTA_SMOKE=1 npm start` runs a bounded number of frames and
+exits `0` — used to verify the loop without a TTY.
 
 ## Rendering model & terminal gotchas
 
@@ -115,9 +127,13 @@ anything under `src/render/` or `src/ui/`.
 - **Alternate screen buffer.** Enter on start (`\x1b[?1049h`), leave on exit
   (`\x1b[?1049l`). The user's scrollback must be untouched when CTA quits.
 - **Always restore the terminal** on *every* exit path — normal quit, `SIGINT`,
-  `SIGTERM`, uncaught exception, `process.on('exit')`. Restore = leave alt
-  screen + show cursor (`\x1b[?25h`) + disable raw mode. A half-restored
-  terminal (no echo, hidden cursor) is the #1 way to ruin the experience.
+  `SIGTERM`, uncaught exception, `process.on('exit')`. Restore **must** reset SGR
+  attributes and the G0 charset (`\x1b[0m\x1b(B`) in addition to autowrap
+  (`\x1b[?7h`), cursor (`\x1b[?25h`), raw mode, and the alt screen
+  (`\x1b[?1049l`). **Skipping the SGR+charset reset bleeds the last frame's color
+  and garbles glyphs into the user's shell** — looks like a corrupted terminal
+  (hit in Phase 1; fixed in [src/terminal.ts](src/terminal.ts)). A half-restored
+  terminal is the #1 way to ruin the experience.
 - **Raw mode** for input (`process.stdin.setRawMode(true)`); restore on exit.
 - **NEVER `console.log` while in the alt screen / raw mode.** It corrupts the
   frame. Route all diagnostics to a debug file (e.g. `CTA_DEBUG=1` → append to a
@@ -217,7 +233,8 @@ Mostly handled by the Agent SDK, but if any code touches the raw Anthropic API:
 ## Don't
 
 - Don't `console.log` / print to stdout while the TUI is active.
-- Don't leave the terminal in alt-screen / raw / cursor-hidden state on exit.
+- Don't leave the terminal dirty on exit — restore alt-screen, raw mode, cursor,
+  autowrap, **SGR attributes, and the G0 charset** (`\x1b[0m\x1b(B`).
 - Don't add a curses-style TUI framework — the from-scratch renderer *is* the
   project.
 - Don't link or shell out to AsciiCreativeCoding binaries — port the math.

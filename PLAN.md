@@ -38,13 +38,13 @@ Effort is T-shirt size (scope/complexity), not calendar time — I'm doing the
 building, so wall-clock per phase is short. The **order** and the **"done when"**
 gates are the real content.
 
-### Phase 0 — Scaffold & TUI bootstrap · **S**
+### Phase 0 — Scaffold & TUI bootstrap · **S** · ✅ done
 Repo setup: TypeScript, build (tsup/esbuild), `bin` entry, raw-mode terminal,
 alternate screen buffer, clean teardown on exit/Ctrl-C, a fixed-timestep loop.
 - **Done when:** `npm run dev` opens a full-screen alt buffer, draws a live FPS
   counter at ~30fps, reads keystrokes, and restores the terminal cleanly on quit.
 
-### Phase 1 — Render engine (the from-scratch core) · **L**
+### Phase 1 — Render engine (the from-scratch core) · **L** · ✅ done
 Double-buffered framebuffer of truecolor cells; diff the previous frame and emit
 only changed cells (no full repaints → no flicker); cursor/escape management;
 resize handling; 256-color fallback.
