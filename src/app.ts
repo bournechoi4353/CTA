@@ -19,8 +19,8 @@ const HUD_BG = rgb(0, 0, 0)
 
 /**
  * Phase 1 harness: drive the render engine with a switchable stress scene and a
- * small HUD overlay. Phases 2+ replace the scene list with the real, state-
- * reactive visualizer and add the agent/transcript/input panes.
+ * small (ASCII-only) HUD overlay. Phases 2+ replace the scene list with the
+ * real, state-reactive visualizer and add the agent/transcript/input panes.
  */
 export function run(): void {
   const term = new Terminal()
@@ -35,7 +35,8 @@ export function run(): void {
 
   term.enter()
 
-  let { cols, rows } = term.size()
+  let cols = term.size().cols
+  let rows = term.size().rows
   const renderer = new Renderer(term, cols, rows)
   const effects: Effect[] = [new Plasma(), new Starfield()]
   let sceneIndex = 0
@@ -50,14 +51,7 @@ export function run(): void {
   let fps = 0
   let fpsAccumMs = 0
   let fpsFrames = 0
-  let stats: FlushStats = { changed: 0, bytes: 0 }
-
-  const offResize = term.onResized((size) => {
-    cols = size.cols
-    rows = size.rows
-    renderer.resize(cols, rows)
-    effects[sceneIndex]?.resize?.(cols, rows)
-  })
+  let stats: FlushStats = { changed: 0, bytes: 0, ok: true }
 
   const offKey = term.onKey((key) => {
     switch (key) {
@@ -68,6 +62,7 @@ export function run(): void {
       case '\t': // Tab — cycle scene
         sceneIndex = (sceneIndex + 1) % effects.length
         effects[sceneIndex]?.resize?.(cols, rows)
+        renderer.markDirty()
         break
       case ' ':
         paused = !paused
@@ -82,7 +77,6 @@ export function run(): void {
 
   const stop = (): void => {
     offKey()
-    offResize()
     term.leave()
   }
 
@@ -92,9 +86,21 @@ export function run(): void {
       return
     }
 
-    const now = performance.now()
-    const dt = (now - lastTick) / 1000
-    lastTick = now
+    const frameStart = performance.now()
+
+    // Self-correct the size every frame: a delayed or coalesced resize event can
+    // never leave us painting a frame sized to stale dimensions (a corruption
+    // source). renderer.resize() forces a full repaint when the size changes.
+    const size = term.size()
+    if (size.cols !== cols || size.rows !== rows) {
+      cols = size.cols
+      rows = size.rows
+      renderer.resize(cols, rows)
+      effects[sceneIndex]?.resize?.(cols, rows)
+    }
+
+    const dt = (frameStart - lastTick) / 1000
+    lastTick = frameStart
     if (!paused) simTime += dt
 
     fpsAccumMs += dt * 1000
@@ -117,10 +123,10 @@ export function run(): void {
     const fb = renderer.begin()
     effect.render(fb, info)
 
-    // HUD overlay (drawn on top of the effect, with a solid bg for legibility).
-    fb.drawText(1, 0, ' CTA · phase 1 — render engine ', HUD_FG, HUD_BG)
-    fb.drawText(1, 1, ` scene ${effect.name}${paused ? '  (paused)' : ''} `, HUD_FG, HUD_BG)
-    fb.drawText(1, 2, ` fps ${fps.toFixed(1)}   ${cols}×${rows} `, HUD_DIM, HUD_BG)
+    // HUD overlay — ASCII only, solid bg for legibility, drawn over the effect.
+    fb.drawText(1, 0, ' CTA - render engine ', HUD_FG, HUD_BG)
+    fb.drawText(1, 1, ` scene: ${effect.name}${paused ? '  (paused)' : ''} `, HUD_FG, HUD_BG)
+    fb.drawText(1, 2, ` fps ${fps.toFixed(1)}   ${cols}x${rows} `, HUD_DIM, HUD_BG)
     if (debug) {
       fb.drawText(1, 3, ` redrawn ${stats.changed} cells   ${stats.bytes} bytes/frame `, HUD_DIM, HUD_BG)
     }
@@ -129,9 +135,25 @@ export function run(): void {
     stats = renderer.flush()
     frame += 1
 
-    // Compensate for this frame's work so cadence stays near the target.
-    const work = performance.now() - now
-    setTimeout(tick, Math.max(0, FRAME_MS - work))
+    const schedule = (): void => {
+      const work = performance.now() - frameStart
+      setTimeout(tick, Math.max(0, FRAME_MS - work))
+    }
+    if (stats.ok) {
+      schedule()
+    } else {
+      // Backpressured: don't pile up writes (truncated writes are a corruption
+      // source). Wait for the stream to drain, with a timeout fallback so the
+      // loop can never permanently stall.
+      let resumed = false
+      const resume = (): void => {
+        if (resumed) return
+        resumed = true
+        schedule()
+      }
+      term.onceDrain(resume)
+      setTimeout(resume, 100)
+    }
   }
 
   tick()

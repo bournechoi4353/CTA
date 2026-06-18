@@ -149,6 +149,15 @@ anything under `src/render/` or `src/ui/`.
   to the new `columns`/`rows`, force a full redraw.
 - **Frame loop:** fixed timestep; cap to ~30–60fps so we don't peg a CPU.
   Decouple simulation update from render where it matters.
+- **Backpressure:** `stdout.write` returns `false` when the OS buffer is full;
+  writing the next frame anyway can truncate a frame mid-escape and garble the
+  screen. Wait for `'drain'` (with a timeout fallback) before the next frame.
+- **Self-heal:** force a full *no-clear* repaint every ~60 frames so transient
+  corruption can't linger in a sparse scene. (`markDirty()` on the renderer.)
+- **Only emit printable ASCII + well-formed escapes.** Sanitize every glyph to a
+  printable char before writing — a single control/C1 byte desyncs the parser
+  and turns everything after it into "creepy text". This matters most in Phase 3
+  when we render *model output*: never pass arbitrary text straight to stdout.
 
 ## Assistant state machine
 

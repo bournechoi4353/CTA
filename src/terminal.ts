@@ -79,9 +79,18 @@ export class Terminal {
     this.in.pause()
   }
 
-  /** Write pre-composed output (escape codes + text) to the screen. */
-  write(data: string): void {
-    this.out.write(data)
+  /**
+   * Write pre-composed output (escape codes + text). Returns false if the
+   * stream is backpressured — the caller should wait for `onceDrain` before
+   * writing the next frame, so writes can't pile up and get truncated.
+   */
+  write(data: string): boolean {
+    return this.out.write(data)
+  }
+
+  /** Invoke `cb` once the output stream drains (back-pressure handling). */
+  onceDrain(cb: () => void): void {
+    this.out.once('drain', cb)
   }
 
   /** Subscribe to decoded keypress data. Returns an unsubscribe function. */
