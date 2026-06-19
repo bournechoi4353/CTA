@@ -2,6 +2,22 @@ import type { Framebuffer } from '../render/framebuffer'
 import type { AssistantState } from '../state/assistantState'
 import type { VisualParams } from '../state/driver'
 
+/**
+ * A repository's persistent visual fingerprint, seeded from its path + git state
+ * and carried across sessions (see src/identity.ts + src/effects/fieldStore.ts).
+ * Lets the same repo render the same signature field every launch — and a
+ * different one from any other repo.
+ */
+export interface ArtIdentity {
+  /** 32-bit seed driving field topology + particle spawn. */
+  seed: number
+  /** Palette rotation in degrees, added to the state's base hue. */
+  hue: number
+  /** Accumulated field lifetime (seconds) across sessions — offsets animation
+   *  time so a relaunch *continues* the field instead of resetting it. */
+  age: number
+}
+
 /** Per-frame timing/size/state context handed to an effect's `render`. */
 export interface FrameInfo {
   /** Seconds since the previous frame (0 while paused). */
@@ -18,6 +34,8 @@ export interface FrameInfo {
   state: AssistantState
   /** Smoothly-interpolated visual knobs for the current state. */
   params: VisualParams
+  /** This repo's persistent field fingerprint (absent → effects use defaults). */
+  identity?: ArtIdentity
 }
 
 /**

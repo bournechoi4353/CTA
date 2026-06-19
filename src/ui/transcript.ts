@@ -9,15 +9,15 @@ import { renderMarkdown } from './markdown'
  * rendered; user/system turns are plain, colored, and labelled. Returns the full
  * list (the app slices it for the scroll window).
  */
-export function buildTranscript(turns: readonly Turn[], width: number): StyledLine[] {
+export function buildTranscript(turns: readonly Turn[], width: number, bg: number = theme.panelBg): StyledLine[] {
   const out: StyledLine[] = []
   for (const turn of turns) {
     if (turn.role === 'assistant') {
-      for (const line of renderMarkdown(turn.text, width, theme.panelBg)) out.push(line)
+      for (const line of renderMarkdown(turn.text, width, bg)) out.push(line)
     } else if (turn.role === 'user') {
       const spans = [
-        { text: 'you  ', fg: theme.user, bg: theme.panelBg },
-        { text: toDisplay(turn.text), fg: theme.user, bg: theme.panelBg },
+        { text: 'you  ', fg: theme.user, bg },
+        { text: toDisplay(turn.text), fg: theme.user, bg },
       ]
       for (const line of wrapSpans(spans, width)) out.push(line)
     } else if (turn.role === 'diff') {
@@ -26,7 +26,7 @@ export function buildTranscript(turns: readonly Turn[], width: number): StyledLi
         for (const line of wrapSpans([{ text: raw, fg, bg: theme.codeBg }], width)) out.push(line)
       }
     } else {
-      const spans = [{ text: toDisplay(turn.text), fg: theme.system, bg: theme.panelBg }]
+      const spans = [{ text: toDisplay(turn.text), fg: theme.system, bg }]
       for (const line of wrapSpans(spans, width)) out.push(line)
     }
   }

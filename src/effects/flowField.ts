@@ -4,6 +4,7 @@ import { hsv } from '../render/color'
 import { glyphIndex, rampCodepoints } from '../render/glyphs'
 
 const RAMP_CP = rampCodepoints() // ' .:-=+*#%@'
+const TAU = Math.PI * 2
 
 /**
  * Flow-field particles (the signature reactive scene). Particles ride a smooth,
@@ -32,16 +33,54 @@ export class FlowField implements Effect {
   private pool = 0
   private seed = 0x9e3779b1
 
+  // Per-repo topology, derived from the art identity's seed (see applyIdentity).
+  // Defaults reproduce the original field, so the effect is unchanged when no
+  // identity is supplied.
+  private idSeed = -1
+  private fScale = 1 // field spatial scale
+  private ph1 = 0 // phase offsets per flow term
+  private ph2 = 0
+  private ph3 = 0
+  private ay = 1.3 // y-axis frequency multiplier
+  private axy = 0.7 // diagonal (x+y) frequency multiplier
+  private swirl = 1 // flow handedness (+1 / -1)
+
   resize(width: number, height: number): void {
     this.ensureSize(width, height)
   }
 
+  /**
+   * Re-derive the field's per-repo shape from a seed: spatial scale, three phase
+   * offsets, axis/diagonal frequencies, and handedness — enough that two repos
+   * swirl visibly differently. Also reseeds the particle PRNG so the ink layout
+   * differs too. Deterministic: same seed → same field.
+   */
+  private applyIdentity(seed: number): void {
+    this.idSeed = seed
+    let s = seed >>> 0
+    const next = (): number => {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0
+      return s / 0xffffffff
+    }
+    this.fScale = 0.75 + next() * 0.75 // 0.75 .. 1.5
+    this.ph1 = next() * TAU
+    this.ph2 = next() * TAU
+    this.ph3 = next() * TAU
+    this.ay = 1.0 + next() * 0.8 // 1.0 .. 1.8
+    this.axy = 0.45 + next() * 0.6 // 0.45 .. 1.05
+    this.swirl = next() < 0.5 ? -1 : 1
+    this.seed = seed >>> 0 // particle spawn PRNG
+  }
+
   render(fb: Framebuffer, info: FrameInfo): void {
+    const id = info.identity
+    if (id && id.seed !== this.idSeed) this.applyIdentity(id.seed)
     this.ensureSize(info.width, info.height)
     const w = this.w
     const h = this.h
     const p = info.params
-    const t = info.time
+    const t = info.time + (id?.age ?? 0) // continue this repo's field across sessions
+    const hueOff = id?.hue ?? 0
     const dt = info.dt
     const intensity = this.intensity
     const hueBuf = this.hueBuf
@@ -84,7 +123,7 @@ export class FlowField implements Effect {
         if (v <= 0.06) continue
         const n = v > 1 ? 1 : v
         const cp = RAMP_CP[glyphIndex(n, RAMP_CP.length)]!
-        const color = hsv(hueBuf[i]!, p.saturation, p.brightness * (0.25 + 0.75 * n))
+        const color = hsv(hueBuf[i]! + hueOff, p.saturation, p.brightness * (0.25 + 0.75 * n))
         fb.set(cx, cy, cp, color)
       }
     }
@@ -110,13 +149,14 @@ export class FlowField implements Effect {
     this.plife[i] = 0.5 + this.rand() * 2.5
   }
 
-  // Smooth, animated flow angle at (x, y). Turbulence scales spatial frequency.
+  // Smooth, animated flow angle at (x, y). Turbulence scales spatial frequency;
+  // the per-repo scale/phase/handedness (from applyIdentity) shape the swirl.
   private angleAt(x: number, y: number, t: number, turbulence: number): number {
-    const f = 0.06 * (0.5 + turbulence)
+    const f = 0.06 * this.fScale * (0.5 + turbulence)
     const a =
-      Math.sin(x * f + t * 0.6) +
-      Math.cos(y * f * 1.3 - t * 0.4) +
-      Math.sin((x + y) * f * 0.7 + t * 0.3)
+      Math.sin(x * f + t * 0.6 + this.ph1) +
+      Math.cos(y * f * this.ay - t * 0.4 + this.ph2) +
+      Math.sin((x + y) * f * this.axy * this.swirl + t * 0.3 + this.ph3)
     return a * Math.PI
   }
 

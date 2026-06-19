@@ -88,7 +88,7 @@ visualizers / an idle screensaver — crib from the **AsciiCreativeCoding**
 reference (see *Reference resources*). Palette + theme system. Config file.
 - **Done when:** multiple selectable visual modes; pick your vibe.
 
-### Phase 7 — Packaging & polish · **S**
+### Phase 7 — Packaging & polish · **S** · ✅ built
 Global `cta` command, config dir, README, graceful degradation on limited
 terminals, error/reconnect handling.
 - **Done when:** install it and run `cta` in any repo.
@@ -106,14 +106,69 @@ events burst. The art becomes readable.
 **8c — Keystroke ripples** — typing sends ripples up into the art — the biggest
 "feels alive" touch. (Shares the fx channel with 8a.)
 
+### Phase 9 — Shed the Claude-Code skin (make it unmistakably *yours*) · **M** · ✅ built (confirm live)
+
+The layout currently reads as "Claude Code with a screensaver": the art is a band
+sandwiched between rounded boxes, so the unique asset (the living field) looks like
+decoration bolted onto a familiar skeleton. Phase 9 inverts that — the art stops
+being a panel and becomes the **substrate everything floats on**, and it becomes
+**literally yours** (seeded from your repo, persistent across sessions) instead of an
+interchangeable scene. These two are independent and can land in either order.
+
+**9a — Borderless bleed layout** · ✅ built (confirm live) — killed the box-in-box
+chrome (the single biggest "Claude Code" tell). The art now fills the **entire
+screen**; the header, transcript, input, and status line are composited *over* the
+field as luminous text on content-width **frosted ribbons** (a themed `scrimBg` laid
+behind text that blanks the art glyphs there so it stays legible, while the field
+bleeds through every gap and out to every edge), like subtitles over video — not
+panels. A short conversation bottom-anchors above the input so the open art owns the
+top. Implemented as a `composeUiBleed()` branch + scrim helpers in
+[src/app.ts](src/app.ts), a themeable `scrimBg` + `bleed` flag in
+[src/ui/theme.ts](src/ui/theme.ts), and a `bg`-parameterised
+[transcript](src/ui/transcript.ts); **bleed is the new default**, persisted to
+[config](src/configStore.ts). The escape hatch is **`/layout panel`** (restores the
+boxed look; `/layout bleed` to return). ASCII-safety + diff-don't-repaint invariants
+hold.
+- **Done when:** ✅ no bordered boxes remain; ✅ the art reaches every edge; ✅ chat +
+  input float over it and stay readable while the field animates underneath; ✅ a
+  `/layout` escape hatch restores the panelled look.
+- *Verified headless* (`CTA_SMOKE=1`, both layouts): exit 0, **0 stray control bytes**,
+  decoded frames show clean text ribbons over full-bleed art (bleed) and the unchanged
+  boxed layout (panel). Live-only: real-agent feel — diffs/code-blocks on frosted
+  ribbons, scroll, ripples over the open art band.
+
+**9b — Persistent, repo-seeded signature field** · ✅ built (confirm live) — the
+signature field is now **seeded from the repo** (FNV-1a hash of the cwd path + git
+`--show-toplevel`/`HEAD`, in [src/identity.ts](src/identity.ts)) and **persists across
+sessions** ([src/effects/fieldStore.ts](src/effects/fieldStore.ts) →
+`~/.cta/fields.json`, mirroring sessionStore). The seed drives per-repo field
+**topology** (scale, phase offsets, axis freqs, handedness) + particle spawn in
+[flowField.ts](src/effects/flowField.ts), plus a **bounded ±75° hue rotation** (also
+applied in torus/matrix) that tints each repo distinctly while preserving the driver's
+state-hue semantics. The field is **born** on first launch then its seed/hue are
+**pinned** (stable across later commits); an accumulating `age` offsets animation time
+so a relaunch **continues** the field instead of resetting it. New `ArtIdentity` rides
+on `FrameInfo`. A `/field` command shows seed/hue/age (`/field new` rerolls). *(Git
+commit-count + time-of-day were dropped from the seed to keep determinism crisp —
+candidate "mood" layers later; the per-edit "lasting mark" remains a stretch.)*
+- **Done when:** ✅ deterministic per-repo (same repo → identical field; repoA-vs-repoA
+  renders 0% different); ✅ two repos look distinct (repoA-vs-repoB renders ~77%
+  different, distinct hues); ✅ relaunching continues the saved field (age grows, seed
+  pinned).
+- *Verified*: a render-level harness (determinism / distinctness / age-continuity) +
+  end-to-end persistence smoke (two runs grow `age` with seed pinned; a second repo
+  gets a distinct entry); typecheck + build clean; headless smoke exit 0, **0 stray
+  control bytes**. Live-only: eyeballing that two real repos *feel* distinct and that a
+  resumed field reads as "the same organism, moved on."
+
 ---
 
 ## Dependency chain
 
 ```
-P0 ─▶ P1 ─▶ P2 ─▶ P3 ─▶ P4 ─▶ P5 ─▶ P6 ─▶ P7
-                   ▲
-            Decision #1 (auth) needed here
+P0 ─▶ P1 ─▶ P2 ─▶ P3 ─▶ P4 ─▶ P5 ─▶ P6 ─▶ P7 ─▶ P8 ─▶ P9
+                   ▲                              ┌─ 9a (layout)  ┐ independent,
+            Decision #1 (auth) needed here        └─ 9b (seed)    ┘ either order
 ```
 
 P0→P2 can start immediately — they're pure rendering and don't touch auth or the

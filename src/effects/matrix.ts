@@ -55,6 +55,7 @@ export class Matrix implements Effect {
     const dt = info.dt
     const intensity = this.intensity
     const glyphBuf = this.glyphBuf
+    const hueOff = info.identity?.hue ?? 0 // this repo's palette rotation
 
     const fade = 0.74 + 0.2 * clamp01(p.trail)
     for (let i = 0; i < intensity.length; i++) intensity[i]! *= fade
@@ -83,7 +84,7 @@ export class Matrix implements Effect {
         if (v <= 0.05) continue
         const glyph = glyphBuf[i]! || 0x20
         const head = v > 0.85
-        const color = hsv(p.hueBase, head ? 0.1 : p.saturation, Math.min(1, p.brightness * (0.25 + 0.75 * v)))
+        const color = hsv(p.hueBase + hueOff, head ? 0.1 : p.saturation, Math.min(1, p.brightness * (0.25 + 0.75 * v)))
         fb.set(cx, cy, glyph, color)
       }
     }

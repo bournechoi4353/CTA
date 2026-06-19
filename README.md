@@ -52,7 +52,8 @@ to make the time spent waiting both informative and worth observing.
 
 ## Getting started
 
-CTA requires **Node ≥ 20** and an Anthropic API key.
+CTA requires **Node ≥ 20**, plus either an `ANTHROPIC_API_KEY` or a logged-in
+`claude` subscription (run `claude` once to log in).
 
 ```bash
 git clone <this-repo> cta && cd cta
@@ -66,6 +67,15 @@ Alternatively, build the binary:
 ```bash
 npm run build
 npm start            # node dist/index.js
+```
+
+Or install it as a global `cta` command (the build runs automatically on link):
+
+```bash
+npm install && npm link
+cta                          # run in any repo
+cta "explain this codebase"  # pre-fill the first prompt
+cta --help
 ```
 
 The assistant is then ready for use: request an explanation of a function, a
@@ -126,13 +136,14 @@ disruptive to the user's shell when not.
 | `npm run typecheck` | `tsc --noEmit` |
 
 `CTA_SMOKE=1 npm start` runs a bounded number of frames headlessly and then exits,
-which is useful for verifying the loop without a TTY. `CTA_DEBUG=1` logs raw SDK
-messages to a file rather than corrupting the screen.
+which is useful for verifying the loop without a TTY. `CTA_DEBUG=/tmp/cta.log`
+logs raw SDK messages to that file rather than corrupting the screen.
 
 ## Status
 
-Phases 0–8 are complete; see [PLAN.md](PLAN.md) for the full roadmap and remaining
-work (packaging and polish). The application is functional and in daily use.
+Phases 0–8 are complete, including packaging (a global `cta` command); see
+[PLAN.md](PLAN.md) for the full roadmap. The application is functional and in
+daily use.
 
 ## Credits
 

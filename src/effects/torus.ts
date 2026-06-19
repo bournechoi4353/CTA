@@ -40,6 +40,7 @@ export class Torus implements Effect {
     const w = this.w
     const h = this.h
     const p = info.params
+    const hueOff = info.identity?.hue ?? 0 // this repo's palette rotation
     this.a += info.dt * (0.6 + p.speed * 0.8) * info.energy
     this.b += info.dt * (0.3 + p.speed * 0.5) * info.energy
 
@@ -79,7 +80,7 @@ export class Torus implements Effect {
           if (ooz > zbuf[i]!) {
             zbuf[i] = ooz
             lum[i] = L
-            this.hue[i] = p.hueBase + L * p.hueSpread * 0.5
+            this.hue[i] = p.hueBase + hueOff + L * p.hueSpread * 0.5
           }
         }
       }

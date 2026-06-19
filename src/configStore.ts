@@ -9,6 +9,7 @@ export interface CtaConfig {
   effort?: string
   asciiBorders?: boolean
   permissionMode?: string
+  layout?: string // 'bleed' (borderless) | 'panel' (boxed)
 }
 
 const DIR = join(homedir(), '.cta')

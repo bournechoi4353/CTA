@@ -50,6 +50,37 @@ when the agent edits, and code blocks are **syntax-highlighted**
 render invariant holds). The live feel (ripples on real tool use, diffs on real
 edits) needs a real run to judge, but the wiring typechecks against the SDK.
 
+**Phase 9a — borderless bleed layout (new default).** The box-in-box chrome is gone:
+the art now fills the **whole screen** and the header, transcript, input, and status
+line float *over* it on content-width **frosted ribbons** — a themeable `theme.scrimBg`
+laid behind text that blanks the art glyphs there for legibility while the field bleeds
+through every gap and to every edge (a short conversation bottom-anchors above the
+input). `composeUi()` in [src/app.ts](src/app.ts) branches: `theme.bleed` (default) →
+`composeUiBleed()` (scrim helpers, no boxes); the old boxed compositor is preserved as
+the **`/layout panel`** escape hatch (`/layout bleed` to return, persisted to
+[config](src/configStore.ts)). `computeLayout()` is now layout-aware (thin 1–2-row
+chrome in bleed vs. 3–4-row boxes in panel). Verified headless in both modes: exit 0,
+**0 stray control bytes**; live feel (frosted code/diff ribbons, ripples over the open
+art band) still wants a real run. **Don't** repaint full rows as scrim — scrim only the
+content width (+`SCRIM_PAD`) so the art keeps bleeding through.
+
+**Phase 9b — persistent, repo-seeded signature field.** The flow-field is now *yours*:
+seeded from the repo (FNV-1a of cwd path + git `--show-toplevel`/`HEAD` in
+[src/identity.ts](src/identity.ts)) and persisted per-project to `~/.cta/fields.json`
+([src/effects/fieldStore.ts](src/effects/fieldStore.ts), mirrors sessionStore). The
+seed drives per-repo **topology** (scale/phase/axis-freq/handedness) + particle spawn in
+[flowField.ts](src/effects/flowField.ts) and a **bounded ±75° hue rotation** (added to
+the driver's state hue, also in torus/matrix) — so two repos render visibly different
+fields while state-hue semantics survive. The field is **born** once, then seed/hue are
+**pinned** (stable across later commits) while an accumulating `age` offsets animation
+time so a relaunch *continues* the field. A new optional `ArtIdentity` rides on
+`FrameInfo` (effects fall back to defaults when it's absent — keep it optional).
+`/field` shows seed/hue/age; `/field new` rerolls (salted derive). Verified:
+determinism (same repo → 0% render diff), distinctness (~77% between repos), age
+continuity, and persistence (age grows, seed pinned) — plus smoke exit 0 / 0 stray
+bytes. **Don't** fold git commit-count or wall-clock time into the *seed* — it breaks
+"same repo → same field"; those belong in a separate non-identity "mood" layer.
+
 Underneath, the chat renders **markdown**
 ([src/ui/markdown.ts](src/ui/markdown.ts)) — fenced code blocks, headers,
 bullets, inline `code`/**bold** — as colored spans
@@ -141,6 +172,7 @@ src/
     flowField.ts      # reactive flow-field (state-driven)                ✓
     torus.ts          # reactive rotating ASCII donut                     ✓
     matrix.ts         # reactive digital rain                             ✓
+    fieldStore.ts     # per-repo field seed/hue/age -> ~/.cta/fields.json  ✓
   state/
     assistantState.ts # state enum + machine                              ✓
     driver.ts         # state → interpolated visual params                ✓
@@ -166,6 +198,7 @@ src/
     diff.ts           # edit/write -> red/green diff text                      ✓
     theme.ts          # swappable palettes (nova/matrix/amber/mono)          ✓
   configStore.ts      # persisted prefs: ~/.cta/config.json                   ✓
+  identity.ts         # repo (path+git) -> deterministic art seed/hue          ✓
 PLAN.md   CLAUDE.md   CREDITS.md
 ```
 
@@ -183,6 +216,11 @@ Tooling: `tsx` (dev), `tsup`/esbuild (build), TypeScript strict, Node ≥ 20.
 
 Headless check: `CTA_SMOKE=1 npm start` runs a bounded number of frames and
 exits `0` — used to verify the loop without a TTY.
+
+Global install: `npm link` (runs `prepare` → `build`) exposes a `cta` command;
+`cta [prompt]` pre-fills the input, `cta --help` / `--version`. Entry + arg
+parsing in [src/index.ts](src/index.ts). Terminals below 40×12 show a "bigger
+terminal" hint instead of a broken layout.
 
 ## Rendering model & terminal gotchas
 
