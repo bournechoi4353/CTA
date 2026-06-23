@@ -1,5 +1,5 @@
 /**
- * The assistant's visual state — the contract between what CTA is doing and what
+ * The assistant's visual state — the contract between what sigil is doing and what
  * the visualizer shows. Phase 2 drives this from keypresses; Phase 3 will drive
  * it from the Claude Agent SDK's event stream.
  */

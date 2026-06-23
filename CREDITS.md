@@ -1,6 +1,6 @@
 # Credits
 
-CTA's terminal-art aesthetic and its catalog of effects are inspired by:
+sigil's terminal-art aesthetic and its catalog of effects are inspired by:
 
 ## AsciiCreativeCoding
 
@@ -19,5 +19,5 @@ reference showcases. If a future effect is a direct port of a specific demo's
 math, its source file will say so explicitly.
 
 > MIT requires preserving the copyright notice when substantial portions of the
-> code are reused. CTA's effects are original implementations informed by the
+> code are reused. sigil's effects are original implementations informed by the
 > reference; this credit is given as a courtesy and to point users to the source.

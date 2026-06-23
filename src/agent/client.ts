@@ -10,7 +10,7 @@ export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 export const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
 // Reads + our own ask tool are auto-approved. Writes/Bash go through the gate.
-const AUTO_ALLOW_TOOLS = ['Read', 'Glob', 'Grep', 'mcp__cta__ask_user']
+const AUTO_ALLOW_TOOLS = ['Read', 'Glob', 'Grep', 'mcp__sigil__ask_user']
 
 /**
  * A multi-turn agent conversation over the Claude Agent SDK.
@@ -42,7 +42,7 @@ export class AgentSession {
         return { content: [{ type: 'text' as const, text: answer }] }
       },
     )
-    this.mcpServer = createSdkMcpServer({ name: 'cta', version: '0.1.0', tools: [askUser] })
+    this.mcpServer = createSdkMcpServer({ name: 'sigil', version: '0.1.0', tools: [askUser] })
   }
 
   get isBusy(): boolean {
@@ -109,7 +109,7 @@ export class AgentSession {
         disallowedTools: ['AskUserQuestion'],
         permissionMode: 'default',
         canUseTool: (toolName, toolInput) => this.gate.request(toolName, toolInput),
-        mcpServers: { cta: this.mcpServer },
+        mcpServers: { sigil: this.mcpServer },
         stderr: (data: string) => debugLog('cli-stderr', data),
       }
       if (this.sessionId) options.resume = this.sessionId

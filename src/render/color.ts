@@ -88,12 +88,12 @@ const ansi256Encoder: SgrEncoder = {
 }
 
 export function detectColorMode(): ColorMode {
-  const force = process.env['CTA_COLOR']
+  const force = process.env['SIGIL_COLOR']
   if (force === '256' || force === 'ansi256') return 'ansi256'
   if (force === 'truecolor' || force === '24bit') return 'truecolor'
   const colorterm = process.env['COLORTERM']
   if (colorterm && /truecolor|24bit/i.test(colorterm)) return 'truecolor'
-  // Default: assume truecolor (most modern terminals); CTA_COLOR=256 forces fallback.
+  // Default: assume truecolor (most modern terminals); SIGIL_COLOR=256 forces fallback.
   return 'truecolor'
 }
 

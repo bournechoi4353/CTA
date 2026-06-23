@@ -9,7 +9,7 @@ const UNSET = -2
 // Periodically repaint every cell (without a clear) so any corruption from a
 // dropped or garbled write self-heals instead of lingering — important for
 // sparse scenes where most cells are otherwise never rewritten.
-const RESYNC_EVERY_FRAMES = 60
+const RESYNC_EVERY_FRAMES = 600
 
 export interface FlushStats {
   /** Cells that differed from the previous frame and were redrawn. */

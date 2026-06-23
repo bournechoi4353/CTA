@@ -1,20 +1,43 @@
 {
-  "name": "cta",
+  "name": "sigil",
   "version": "0.1.0",
-  "private": true,
+  "description": "A terminal coding assistant with a living, reactive ANSI-art visualizer, built on the Claude Agent SDK.",
   "type": "module",
-  "description": "A terminal-resident coding companion with a reactive ANSI visualizer.",
+  "license": "MIT",
+  "author": "Bourne Choi",
+  "homepage": "https://github.com/bournechoi4353/CTA#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bournechoi4353/CTA.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bournechoi4353/CTA/issues"
+  },
+  "keywords": [
+    "cli",
+    "terminal",
+    "tui",
+    "ansi",
+    "claude",
+    "ai",
+    "coding-assistant",
+    "agent",
+    "generative-art",
+    "visualizer"
+  ],
   "bin": {
-    "cta": "./dist/index.js"
+    "sigil": "./dist/index.js"
   },
   "engines": {
     "node": ">=20"
   },
   "files": [
-    "dist"
+    "dist",
+    "CREDITS.md"
   ],
   "scripts": {
     "prepare": "npm run build",
+    "prepublishOnly": "npm run typecheck",
     "dev": "tsx src/index.ts",
     "dev:watch": "tsx watch src/index.ts",
     "build": "tsup",

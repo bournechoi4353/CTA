@@ -5,6 +5,22 @@ import { glyphIndex, rampCodepoints } from '../render/glyphs'
 
 const RAMP = rampCodepoints(' .,-~:;=!*#$@')
 
+// Donut surface sampling steps. The sampled angles are identical every frame,
+// so their sines/cosines are precomputed once into lookup tables — the render
+// loop then does zero trig (only multiplies), instead of ~26k cos/sin/frame.
+const THETA_STEP = 0.1
+const PHI_STEP = 0.03
+
+function trigTable(step: number): { cos: Float64Array; sin: Float64Array } {
+  const cos: number[] = []
+  const sin: number[] = []
+  for (let a = 0; a < 6.283; a += step) {
+    cos.push(Math.cos(a))
+    sin.push(Math.sin(a))
+  }
+  return { cos: Float64Array.from(cos), sin: Float64Array.from(sin) }
+}
+
 /**
  * A rotating ASCII torus (the classic "donut") with z-buffered luminance
  * shading. Reactive: rotation speed from params.speed, palette from
@@ -20,6 +36,8 @@ export class Torus implements Effect {
   private zbuf = new Float32Array(0)
   private lum = new Float32Array(0)
   private hue = new Float32Array(0)
+  private readonly theta = trigTable(THETA_STEP)
+  private readonly phi = trigTable(PHI_STEP)
 
   resize(width: number, height: number): void {
     this.ensure(width, height)
@@ -46,6 +64,7 @@ export class Torus implements Effect {
 
     const zbuf = this.zbuf
     const lum = this.lum
+    const hueB = this.hue
     zbuf.fill(0)
     lum.fill(0)
 
@@ -60,14 +79,23 @@ export class Torus implements Effect {
     const cx = w / 2
     const cy = h / 2
 
-    for (let theta = 0; theta < 6.283; theta += 0.1) {
-      const ct = Math.cos(theta)
-      const st = Math.sin(theta)
+    const cosT = this.theta.cos
+    const sinT = this.theta.sin
+    const cosP = this.phi.cos
+    const sinP = this.phi.sin
+    const tn = cosT.length
+    const pn = cosP.length
+    const hueBase = p.hueBase + hueOff
+    const hueScale = p.hueSpread * 0.5
+
+    for (let ti = 0; ti < tn; ti++) {
+      const ct = cosT[ti]!
+      const st = sinT[ti]!
       const circleX = R2 + R1 * ct
       const circleY = R1 * st
-      for (let phi = 0; phi < 6.283; phi += 0.03) {
-        const cp = Math.cos(phi)
-        const sp = Math.sin(phi)
+      for (let pi = 0; pi < pn; pi++) {
+        const cp = cosP[pi]!
+        const sp = sinP[pi]!
         const x = circleX * (cosB * cp + sinA * sinB * sp) - circleY * cosA * sinB
         const y = circleX * (sinB * cp - sinA * cosB * sp) + circleY * cosA * cosB
         const z = K2 + cosA * circleX * sp + circleY * sinA
@@ -80,7 +108,7 @@ export class Torus implements Effect {
           if (ooz > zbuf[i]!) {
             zbuf[i] = ooz
             lum[i] = L
-            this.hue[i] = p.hueBase + hueOff + L * p.hueSpread * 0.5
+            hueB[i] = hueBase + L * hueScale
           }
         }
       }
@@ -91,7 +119,7 @@ export class Torus implements Effect {
       if (L <= 0) continue
       const n = Math.min(1, L / Math.SQRT2)
       const cp = RAMP[glyphIndex(n, RAMP.length)]!
-      fb.set(i % w, (i / w) | 0, cp, hsv(this.hue[i]!, p.saturation, p.brightness * (0.3 + 0.7 * n)))
+      fb.set(i % w, (i / w) | 0, cp, hsv(hueB[i]!, p.saturation, p.brightness * (0.3 + 0.7 * n)))
     }
   }
 }

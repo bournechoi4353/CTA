@@ -31,9 +31,9 @@ import { loadConfig, saveConfig } from './configStore'
 import type { StyledLine } from './ui/spans'
 
 const VERSION = 'v0.1.0'
-const TARGET_FPS = 30
+const TARGET_FPS = 60
 const FRAME_MS = 1000 / TARGET_FPS
-const SMOKE = process.env['CTA_SMOKE'] === '1'
+const SMOKE = process.env['SIGIL_SMOKE'] === '1'
 const SMOKE_FRAMES = 60
 const PLACEHOLDER = 'Ask about your code, or /help'
 const EFFORT_ENERGY: Record<string, number> = { low: 0.5, medium: 0.75, high: 1.0, xhigh: 1.3, max: 1.6 }
@@ -54,7 +54,7 @@ export function run(initialPrompt?: string): void {
   const term = new Terminal()
   if (!term.isInteractive && !SMOKE) {
     process.stderr.write(
-      'CTA needs an interactive terminal (a TTY). Run it directly in your shell.\n',
+      'sigil needs an interactive terminal (a TTY). Run it directly in your shell.\n',
     )
     process.exitCode = 1
     return
@@ -441,7 +441,7 @@ export function run(initialPrompt?: string): void {
     // Graceful degradation: too small for the layout — show a hint and wait.
     if (cols < 40 || rows < 12) {
       const fb = renderer.begin()
-      const msg = `CTA needs a bigger terminal (min 40x12, now ${cols}x${rows})`
+      const msg = `sigil needs a bigger terminal (min 40x12, now ${cols}x${rows})`
       fb.drawText(Math.max(0, (cols - msg.length) >> 1), rows >> 1, msg.slice(0, cols), theme.warn, theme.hudBg)
       renderer.flush()
       setTimeout(tick, 250)
@@ -616,7 +616,7 @@ export function composeUi(fb: Framebuffer, s: UiState): void {
   drawRow(
     fb,
     1,
-    `${SYM.logo} CTA ${VERSION}${SYM.sep}${model}${SYM.sep}${planLabel(s.auth)}`,
+    `${SYM.logo} sigil ${VERSION}${SYM.sep}${model}${SYM.sep}${planLabel(s.auth)}`,
     theme.hudFg,
     stateText,
     theme.accent,
@@ -732,7 +732,7 @@ function composeUiBleed(fb: Framebuffer, s: UiState): void {
   floatRow(
     fb,
     0,
-    `${SYM.logo} CTA ${VERSION}${SYM.sep}${model}${SYM.sep}${planLabel(s.auth)}`,
+    `${SYM.logo} sigil ${VERSION}${SYM.sep}${model}${SYM.sep}${planLabel(s.auth)}`,
     theme.hudFg,
     stateText,
     theme.accent,

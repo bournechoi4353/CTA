@@ -2,7 +2,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
-// Persisted UI preferences: ~/.cta/config.json
+// Persisted UI preferences: ~/.sigil/config.json
 export interface CtaConfig {
   theme?: string
   scene?: string
@@ -12,7 +12,7 @@ export interface CtaConfig {
   layout?: string // 'bleed' (borderless) | 'panel' (boxed)
 }
 
-const DIR = join(homedir(), '.cta')
+const DIR = join(homedir(), '.sigil')
 const FILE = join(DIR, 'config.json')
 
 export function loadConfig(): CtaConfig {

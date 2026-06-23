@@ -1,8 +1,8 @@
-# CTA
+# sigil
 
 *A Claude Code–style coding assistant, purpose-built.*
 
-CTA is a terminal-resident coding assistant. It pairs Claude, running on the
+sigil is a terminal-resident coding assistant. It pairs Claude, running on the
 [Agent SDK](https://github.com/anthropics/claude-agent-sdk-typescript), with a
 from-scratch ANSI render loop, giving the application a reactive visual presence —
 not a mascot, but a band of generative art at the center of the screen. The art
@@ -10,11 +10,11 @@ drifts while Claude is idle, tightens during reasoning, and ripples in color as
 each tool executes. The user types, the visualization responds, and Claude replies.
 
 The project was motivated by a simple observation: most coding tools present as a
-plain text box. CTA is an attempt to make the interface itself convey activity —
+plain text box. sigil is an attempt to make the interface itself convey activity —
 to make the time spent waiting both informative and worth observing.
 
 ```
- ╭─ ✦ CTA · claude-opus-4-8 · plan · ~/code/thing ─────────────────╮
+ ╭─ ✦ sigil · claude-opus-4-8 · plan · ~/code/thing ───────────────╮
  │                                                                 │
  │        · · ∙ ∙ ╱ ╱ ╱ ─ ─ ╲ ╲ ∙ ∙ · ·    (the art band)         │
  │      ∙ ╱ ╱ ─ ─ ─ ╲ ╲ ╲ ╲ ─ ─ ╱ ╱ ∙                              │
@@ -22,7 +22,7 @@ to make the time spent waiting both informative and worth observing.
  ╰─────────────────────────────────────────────────────────────────╯
  ╭─ conversation ──────────────────────────────────────────────────╮
  │ › what does parseConfig do?                                     │
- │ It reads ~/.cta/config.json and merges it with defaults…        │
+ │ It reads ~/.sigil/config.json and merges it with defaults…      │
  ╰─────────────────────────────────────────────────────────────────╯
  ╭─────────────────────────────────────────────────────────────────╮
  │ › _                                                             │
@@ -44,7 +44,10 @@ to make the time spent waiting both informative and worth observing.
   rotating ASCII torus, Matrix-style rain, plasma, and a starfield, selectable via
   `/scene`. Chrome appearance is reconfigurable with `/theme`
   (`nova`, `matrix`, `amber`, or `mono`). Selections persist to
-  `~/.cta/config.json`.
+  `~/.sigil/config.json`.
+- **A per-repo signature field.** The flow field is seeded from the repository and
+  persists across sessions, so each project grows its own distinct, continuing
+  visualizer (`/field` to inspect it).
 - **A complete terminal application.** Features include markdown rendering,
   syntax-highlighted code blocks, red/green diffs on file edits, a scrollable
   transcript (PgUp/PgDn, Home/End), input history, slash commands, and per-project
@@ -52,30 +55,32 @@ to make the time spent waiting both informative and worth observing.
 
 ## Getting started
 
-CTA requires **Node ≥ 20**, plus either an `ANTHROPIC_API_KEY` or a logged-in
+sigil requires **Node ≥ 20**, plus either an `ANTHROPIC_API_KEY` or a logged-in
 `claude` subscription (run `claude` once to log in).
 
+Once it's published to npm, installation is a single command:
+
 ```bash
-git clone <this-repo> cta && cd cta
+npm install -g sigil
+sigil                 # run in any repo
+```
+
+To run from source instead:
+
+```bash
+git clone https://github.com/bournechoi4353/CTA.git sigil && cd sigil
 npm install
 export ANTHROPIC_API_KEY=sk-ant-...
 npm run dev          # run directly from source
 ```
 
-Alternatively, build the binary:
-
-```bash
-npm run build
-npm start            # node dist/index.js
-```
-
-Or install it as a global `cta` command (the build runs automatically on link):
+Or build and link it as a global `sigil` command (the build runs on link):
 
 ```bash
 npm install && npm link
-cta                          # run in any repo
-cta "explain this codebase"  # pre-fill the first prompt
-cta --help
+sigil                          # run in any repo
+sigil "explain this codebase"  # pre-fill the first prompt
+sigil --help
 ```
 
 The assistant is then ready for use: request an explanation of a function, a
@@ -93,6 +98,8 @@ prefer fewer interruptions.
 | `PgUp` / `PgDn` · `Home` / `End` | scroll the transcript |
 | `/scene [name]` | switch the visualizer |
 | `/theme [nova\|matrix\|amber\|mono]` | re-skin the chrome |
+| `/layout [bleed\|panel]` | full-bleed art vs. boxed panels |
+| `/field [new]` | inspect (or reroll) this repo's signature field |
 | `/effort [low\|medium\|high\|xhigh\|max]` | adjust reasoning depth |
 | `/borders` | toggle rounded ↔ ASCII boxes |
 | `/resume` · `/new` · `/clear` | session handling |
@@ -135,18 +142,22 @@ disruptive to the user's shell when not.
 | `npm start` | run the built binary |
 | `npm run typecheck` | `tsc --noEmit` |
 
-`CTA_SMOKE=1 npm start` runs a bounded number of frames headlessly and then exits,
-which is useful for verifying the loop without a TTY. `CTA_DEBUG=/tmp/cta.log`
+`SIGIL_SMOKE=1 npm start` runs a bounded number of frames headlessly and then exits,
+which is useful for verifying the loop without a TTY. `SIGIL_DEBUG=/tmp/sigil.log`
 logs raw SDK messages to that file rather than corrupting the screen.
 
 ## Status
 
-Phases 0–8 are complete, including packaging (a global `cta` command); see
-[PLAN.md](PLAN.md) for the full roadmap. The application is functional and in
-daily use.
+Phases 0–9 are complete, including packaging (a global `sigil` command) and the
+full-bleed, repo-seeded signature art; see [PLAN.md](PLAN.md) for the full
+roadmap. The application is functional and in daily use.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
 
 ## Credits
 
-The effect mathematics is ported — not linked — from
+The effect mathematics is informed — not linked — by
 [AsciiCreativeCoding](https://github.com/prtamil/AsciiCreativeCoding) by
 Tamilselvan R, under the MIT license. See [CREDITS.md](CREDITS.md).

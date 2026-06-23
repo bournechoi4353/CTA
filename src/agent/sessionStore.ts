@@ -3,8 +3,8 @@ import { join } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
 // Per-project last-session map, so `/resume` can continue a prior conversation
-// across restarts: ~/.cta/sessions.json  { "<cwd>": "<sessionId>" }
-const DIR = join(homedir(), '.cta')
+// across restarts: ~/.sigil/sessions.json  { "<cwd>": "<sessionId>" }
+const DIR = join(homedir(), '.sigil')
 const FILE = join(DIR, 'sessions.json')
 
 type Store = Record<string, string>

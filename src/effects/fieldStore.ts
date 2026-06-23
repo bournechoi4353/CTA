@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
 /**
  * Per-project art-field persistence, so a repo's signature visualizer is *born*
- * once and then continues across launches: ~/.cta/fields.json
+ * once and then continues across launches: ~/.sigil/fields.json
  *   { "<cwd>": { seed, hue, age, born } }
  *
  * `seed`/`hue` are pinned on first launch (the field's identity stays stable even
@@ -18,7 +18,7 @@ export interface StoredField {
   born: number // ms epoch of the field's first launch in this repo
 }
 
-const DIR = join(homedir(), '.cta')
+const DIR = join(homedir(), '.sigil')
 const FILE = join(DIR, 'fields.json')
 
 type Store = Record<string, StoredField>

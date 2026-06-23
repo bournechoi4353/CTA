@@ -5,16 +5,16 @@ const VERSION = '0.1.0'
 const args = process.argv.slice(2)
 
 if (args.includes('-v') || args.includes('--version')) {
-  process.stdout.write(`cta v${VERSION}\n`)
+  process.stdout.write(`sigil v${VERSION}\n`)
   process.exit(0)
 }
 
 if (args.includes('-h') || args.includes('--help')) {
   process.stdout.write(
     [
-      `cta v${VERSION} — a terminal coding assistant with a reactive visualizer`,
+      `sigil v${VERSION} — a terminal coding assistant with a reactive visualizer`,
       '',
-      'usage: cta [options] [prompt]',
+      'usage: sigil [options] [prompt]',
       '',
       '  prompt          pre-fill the input with this text (press Enter to send)',
       '  -h, --help      show this help',

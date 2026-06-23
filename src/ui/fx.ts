@@ -94,7 +94,7 @@ export class Fx {
     if (this.glitch > 0.02) {
       const cols = x1 - x0 + 1
       const rows = y1 - y0 + 1
-      const n = Math.floor(this.glitch * cols * rows * 0.12)
+      const n = Math.floor(this.glitch * cols * rows * 0.07)
       for (let k = 0; k < n; k++) {
         const cx = x0 + ((this.rand() * cols) | 0)
         const cy = y0 + ((this.rand() * rows) | 0)

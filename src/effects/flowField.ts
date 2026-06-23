@@ -85,8 +85,10 @@ export class FlowField implements Effect {
     const intensity = this.intensity
     const hueBuf = this.hueBuf
 
-    // Fade existing ink — longer trails when params.trail is high.
-    const fade = 0.7 + 0.27 * clamp01(p.trail)
+    // Fade existing ink — longer trails when params.trail is high. Raised to
+    // the frame's share of a 30fps step so the trail length is the same in
+    // wall-clock time at any frame rate (and doesn't shorten when we hit 60fps).
+    const fade = Math.pow(0.7 + 0.27 * clamp01(p.trail), dt * 30)
     for (let i = 0; i < intensity.length; i++) intensity[i]! *= fade
 
     // Advance the active particles (count scales with density).

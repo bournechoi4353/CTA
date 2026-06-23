@@ -29,7 +29,7 @@ type LooseBlock = { type: string; text?: string; name?: string; input?: Record<s
  * the message shape: system/init → starting, assistant text → responding,
  * tool_use → tool-running, user/tool_result → thinking, result → idle/error.
  *
- * NOTE: verify these shapes against a live run via CTA_DEBUG — the TS SDK does
+ * NOTE: verify these shapes against a live run via SIGIL_DEBUG — the TS SDK does
  * not publish a complete event enum, so this is the documented-best mapping.
  */
 export function mapMessage(msg: SDKMessage, h: AgentHandlers): void {

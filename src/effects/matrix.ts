@@ -57,20 +57,27 @@ export class Matrix implements Effect {
     const glyphBuf = this.glyphBuf
     const hueOff = info.identity?.hue ?? 0 // this repo's palette rotation
 
-    const fade = 0.74 + 0.2 * clamp01(p.trail)
+    // Frame-rate-independent fade (same tail length in wall-clock at any fps).
+    const fade = Math.pow(0.74 + 0.2 * clamp01(p.trail), dt * 30)
     for (let i = 0; i < intensity.length; i++) intensity[i]! *= fade
 
     const density = clamp01(p.density)
     for (let x = 0; x < w; x++) {
       if (this.colActive[x]! >= density) continue
-      let y = this.dropY[x]! + this.dropSpeed[x]! * (0.4 + p.speed) * info.energy * dt
+      const prevY = this.dropY[x]!
+      const y = prevY + this.dropSpeed[x]! * (0.4 + p.speed) * info.energy * dt
       if (y >= h + 2) {
-        y = -(this.rand() * h * 0.6)
+        // Recycle the column to just above the top with a fresh speed.
+        this.dropY[x] = -(this.rand() * h * 0.6)
         this.dropSpeed[x] = 6 + this.rand() * 18
+        continue
       }
       this.dropY[x] = y
-      const cy = y | 0
-      if (cy >= 0 && cy < h) {
+      // Light every row the head crossed since the last frame, so a fast drop
+      // leaves a continuous streak instead of a dotted, gappy one.
+      const from = Math.max(0, Math.floor(prevY))
+      const to = Math.min(h - 1, Math.floor(y))
+      for (let cy = from; cy <= to; cy++) {
         const cell = cy * w + x
         intensity[cell] = 1
         glyphBuf[cell] = CHAR_CP[(this.rand() * CHAR_CP.length) | 0]!
